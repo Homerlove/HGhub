@@ -175,16 +175,16 @@ async fn probe_one(url: String) -> Value {
 
 /* ───────────────────────── 自动选线 ───────────────────────── */
 
-/// 自动选线的两条候选：主站（海外能连）与国内专线。
-/// 国内基本连不上 `.com`；在海外 `.ai` 会绕远，一定比 `.com` 慢。
-/// 所以直接比这两条就够：不判断地区、不扫镜像列表、不看延迟阈值。
+/// 自动选线的两条候选：主站 `.com` 与国内 `.ai`。
+/// 国内基本连不上 `.com`，海外 `.ai` 一定比 `.com` 慢，所以两条各打一下就够。
 pub const AUTO_LINES: [(&str, &str); 2] = [
     ("main", crate::net::DEFAULT_BASE),
     ("cn", "https://huangguoai.ai"),
 ];
-
-/// 自动探测比手动探测短：这个超时只在启动/换网时用，等太久不如直接用另一条。
-const AUTO_PROBE_TIMEOUT: Duration = Duration::from_secs(4);
+/// 判活就打这一个请求，成本等于 ping：能返回 200 就是这条线路能用。
+const AUTO_PROBE_PATH: &str = "/api/videos?page=1&size=1";
+/// 探测超时：只在启动/换网时用，等太久不如直接用另一条。
+const AUTO_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// 一条候选线路的探测结果。
 #[derive(Clone)]
@@ -211,24 +211,18 @@ impl Hit {
 }
 
 async fn probe_hit(tier: &'static str, url: &str) -> Hit {
-    let target = format!("{}/", url.trim_end_matches('/'));
+    let target = format!("{}{}", url.trim_end_matches('/'), AUTO_PROBE_PATH);
     let started = Instant::now();
-    let res = crate::net::get(
-        &target,
-        AUTO_PROBE_TIMEOUT,
-        Some("text/html,application/xhtml+xml"),
-        None,
-    )
-    .await;
+    let res = crate::net::get(&target, AUTO_PROBE_TIMEOUT, Some("application/json"), None).await;
     let ms = started.elapsed().as_millis() as u64;
     match res {
         Ok(r) => {
             let status = r.status().as_u16();
-            // 4xx 也说明域名后面是活的站点（鉴权、跳转都可能），只有 5xx / 网络错误才算不通
             Hit {
                 tier,
                 url: url.to_string(),
-                ok: status < 400,
+                // 只看接口：首页 200 不代表能用（.ai 就是 200 + /api 全 404）
+                ok: status == 200,
                 reachable: status < 500,
                 ms,
                 status: Some(status),
@@ -245,40 +239,44 @@ async fn probe_hit(tier: &'static str, url: &str) -> Hit {
     }
 }
 
-/// 自动选线：`.com` 与 `.ai` 各探一次，通的、快的胜出。
+/// 自动选线：只 ping 主站。通了就用 `.com`，不通用 `.ai`。
 ///
-/// 两条都不通时返回当前线路（`tier: "none"`），由调用方决定要不要提示用户。
+/// ping = 一次 `GET /api/videos?page=1&size=1`，成本跟 ICMP 差不多。
+/// 只看首页不够：`.ai` 首页 200，但它只是落地页，`/api` 全 404。
 pub async fn auto_pick() -> Value {
-    let mut handles = Vec::new();
-    for (tier, url) in AUTO_LINES {
-        handles.push(tokio::spawn(async move { probe_hit(tier, url).await }));
-    }
-    let mut hits: Vec<Hit> = Vec::new();
-    for h in handles {
-        if let Ok(hit) = h.await {
-            hits.push(hit);
-        }
-    }
-    // 完全正常的优先，其次 4xx 也算活着，最后才比延迟
-    hits.sort_by_key(|h| (!h.ok, !h.reachable, h.ms));
-    let candidates: Vec<Value> = hits.iter().map(Hit::json).collect();
+    let (main_tier, main_url) = AUTO_LINES[0];
+    let (cn_tier, cn_url) = AUTO_LINES[1];
 
-    match hits.first().filter(|h| h.reachable).cloned() {
-        Some(h) => json!({
-            "base": h.url,
-            "tier": h.tier,
-            "ms": h.ms,
-            "reason": "fastest-reachable",
-            "candidates": candidates,
-        }),
-        None => json!({
-            "base": crate::net::base(),
-            "tier": "none",
-            "ms": 0,
-            "reason": "all-unreachable",
-            "candidates": candidates,
-        }),
+    let main_hit = probe_hit(main_tier, main_url).await;
+    if main_hit.ok {
+        return json!({
+            "base": main_url,
+            "tier": main_tier,
+            "ms": main_hit.ms,
+            "reason": "main-ok",
+            "candidates": [main_hit.json()],
+        });
     }
+
+    // 主站不通（国内），走专线；专线也不通就保持当前线路不动
+    let cn_hit = probe_hit(cn_tier, cn_url).await;
+    let candidates = [main_hit.json(), cn_hit.json()];
+    if cn_hit.ok {
+        return json!({
+            "base": cn_url,
+            "tier": cn_tier,
+            "ms": cn_hit.ms,
+            "reason": "fallback-cn",
+            "candidates": candidates,
+        });
+    }
+    json!({
+        "base": crate::net::base(),
+        "tier": "none",
+        "ms": 0,
+        "reason": "all-unreachable",
+        "candidates": candidates,
+    })
 }
 
 async fn get_text(url: &str) -> Result<String, String> {

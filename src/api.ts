@@ -146,7 +146,7 @@ export type LineProbe = { url: string; ok: boolean; status?: number; ms: number;
 
 /** 自动选线：只比 `.com` 与 `.ai` 两条，取通的那条、快的那条。 */
 export type LineAutoCandidate = {
-  tier: "main" | "cn";
+  tier: "main" | "cn" | "mirror";
   url: string;
   ok: boolean;
   reachable: boolean;
