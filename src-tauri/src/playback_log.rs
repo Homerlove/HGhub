@@ -247,6 +247,29 @@ pub fn playback_log_read() -> Result<String, String> {
     let log = LOG.lock().map_err(|_| "日志锁失败")?;
     let dir = log.dir.as_ref().ok_or("日志目录尚未初始化")?;
     let mut text = String::new();
+    // 环境块放最前面：用户「复制 → 粘贴」就能直接看，不用再自报版本、平台、线路。
+    // 线路只保留 host，不带路径与查询串（签名参数一个都不落盘）。
+    let base = crate::net::base();
+    let host = base.split("://").nth(1).unwrap_or(&base);
+    let host = host.split('/').next().unwrap_or(host);
+    text.push_str(&format!(
+        "=== 环境（自动生成，无需另行补充）===\n\
+         version : {ver}\n\
+         target  : {os} / {arch}\n\
+         line    : {host}\n\
+         strict  : {strict}\n\
+         pid     : {pid}\n\
+         time    : {ts}\n\
+         说明    : 取播放地址与接口失败看下方 [play] / [api] 行；\n\
+         视频 id / 集数 / 状态码都在 [play] 行里；WebView 内核见 [env] 行\n\n",
+        ver = env!("CARGO_PKG_VERSION"),
+        os = std::env::consts::OS,
+        arch = std::env::consts::ARCH,
+        host = host,
+        strict = crate::network_policy::strict_security(),
+        pid = std::process::id(),
+        ts = crate::logging::utc_timestamp().unwrap_or_default(),
+    ));
     for name in ["playback.previous.log", "playback.log"] {
         let path = dir.join(name);
         if path.exists() {

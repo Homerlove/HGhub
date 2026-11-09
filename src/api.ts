@@ -18,6 +18,10 @@ export const isMacos = !isIos && /Macintosh|Mac OS X/i.test(ua);
 export const isLinux = !isAndroid && !isIos && !isMacos && /Linux|X11/i.test(ua);
 export const platform: "android" | "ios" | "windows" | "macos" | "linux" =
   isAndroid ? "android" : isIos ? "ios" : isMacos ? "macos" : isLinux ? "linux" : "windows";
+/** WebView 内核版本：能不能走 MSE、能解哪些封装，是「无法播放」的首要判据。
+ *  安卓取 Chrome/xxx（System WebView），Linux/macOS 取 WebKit 的 Version/xxx。 */
+export const webviewVersion =
+  /Chrome\/([\d.]+)/.exec(ua)?.[1] || /Version\/([\d.]+)/.exec(ua)?.[1] || "?";
 /** 移动端（安卓 / iOS）共用触屏界面 */
 export const isMobile = isAndroid || isIos;
 
