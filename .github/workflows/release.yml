@@ -225,9 +225,9 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
-  # ================= Linux：deb + AppImage =================
+  # ================= Linux：deb =================
   linux:
-    name: Linux (deb + AppImage)
+    name: Linux (deb)
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -267,8 +267,8 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # 打包目标（deb + AppImage）取自 src-tauri/tauri.linux.conf.json
-      - name: 构建（deb + AppImage）
+      # 打包目标取自 src-tauri/tauri.linux.conf.json
+      - name: 构建（deb）
         run: pnpm tauri build
 
       - name: 收集产物
@@ -277,7 +277,6 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts
           cp src-tauri/target/release/bundle/deb/*.deb "artifacts/HGhub_${{ steps.ver.outputs.version }}_amd64.deb"
-          cp src-tauri/target/release/bundle/appimage/*.AppImage "artifacts/HGhub_${{ steps.ver.outputs.version }}_amd64.AppImage"
           ls -lh artifacts
 
       - uses: actions/upload-artifact@v4

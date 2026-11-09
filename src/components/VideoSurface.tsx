@@ -1,6 +1,7 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef, useState } from "react";
 import Hls from "hls.js";
 import { isLocalMedia, playlist } from "../api";
+import { mediaErrorMessage } from "../mediaErrors";
 import { mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
 import { usePlaybackActivity } from "../usePlaybackActivity";
 
@@ -151,6 +152,11 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
     v.playbackRate = rate;
   };
 
+  const handleVideoError = () => {
+    if (hlsRef.current) return;
+    onError?.(mediaErrorMessage(videoRef.current?.error ?? null));
+  };
+
   return (
     <video
       ref={videoRef}
@@ -174,6 +180,7 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
       onWaiting={() => onWaiting?.()}
       onPlaying={() => { if (activity.isActive()) onPlaying?.(); }}
       onEnded={() => { if (activity.isActive()) onEnded?.(); }}
+      onError={handleVideoError}
     />
   );
 });

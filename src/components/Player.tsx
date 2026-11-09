@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { fmtTime, playlist } from "../api";
+import { mediaErrorMessage } from "../mediaErrors";
 import { mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
 import { usePlaybackActivity } from "../usePlaybackActivity";
 import { useSeekInput } from "../useSeekInput";
@@ -55,6 +56,8 @@ export default function Player({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
+    setErrMsg("");
+    setWaiting(false);
     const url = playlist(src);
     trace("source.load", { engine: Hls.isSupported() ? "hls.js" : "native", auto_play: autoPlay });
 
@@ -162,6 +165,12 @@ export default function Player({
         onTimeUpdate={(e) => setTime((e.target as HTMLVideoElement).currentTime)}
         onLoadedMetadata={(e) => setDuration((e.target as HTMLVideoElement).duration || 0)}
         onEnded={() => { if (activity.isActive()) onEnded?.(); }}
+        onError={() => {
+          if (hlsRef.current) return;
+          setWaiting(false);
+          setPlaying(false);
+          setErrMsg(mediaErrorMessage(videoRef.current?.error ?? null));
+        }}
       />
 
       {errMsg && (
