@@ -8,12 +8,26 @@ use serde_json::{json, Value};
 use std::time::{Duration, Instant};
 
 /// 固定线路：写死在客户端里，不依赖任何外部页面。
-pub const FIXED: [(&str, &str); 2] = [
+pub const FIXED: [(&str, &str); 1] = [
     ("固定线路 1", "https://huangguoai.com"),
-    ("固定线路 2", "https://huangguoai.ai"),
 ];
 
 const PUBLISH_PAGE: &str = "https://huangguoai.pages.dev/";
+/// 推荐镜像源：这个页面每次打开都会重挑线路，正好当「推荐镜像组」的来源。
+const RECOMMEND_PAGE: &str = "https://huangguoai.ai/";
+/// 推荐页里会出现、但不是站点本体的域名（地址发布页 / 下载站 / 图床 / 统计 / 跳转）。
+const NOT_SITE: [&str; 10] = [
+    "pages.dev",
+    "huangguoai.ai",
+    "huangguoju.com",
+    "gvsnzgbim.cc",
+    "hgai12.com",
+    "drleao.cn",
+    "googletagmanager.com",
+    "cloudfront.net",
+    "t.me",
+    "x.com",
+];
 /// 镜像列表上限（子域 × 域名是笛卡尔积，界面只展示这么多）
 const MIRROR_MAX: usize = 60;
 /// 单条线路探测超时
@@ -65,7 +79,60 @@ pub async fn mirrors() -> Result<Value, String> {
         return Err("地址发布页里没有可用的镜像地址".to_string());
     }
 
-    Ok(json!({ "source": PUBLISH_PAGE, "script": js_url, "items": items }))
+    let recommended = recommend().await;
+    Ok(json!({
+        "source": PUBLISH_PAGE,
+        "script": js_url,
+        "items": items,
+        "recommended_source": RECOMMEND_PAGE,
+        "recommended": recommended,
+    }))
+}
+
+/// 推荐镜像组：抓推荐源页面，取页面上挂出的站点域名。
+/// 只由 `mirrors()` 调用；条目结构与 `items` 完全一致，顺序保持页面自己的排列。
+async fn recommend() -> Vec<Value> {
+    let Ok(html) = get_text(RECOMMEND_PAGE).await else {
+        return Vec::new();
+    };
+
+    let mut items: Vec<Value> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for host in href_hosts(&html) {
+        if NOT_SITE.iter().any(|bad| host.ends_with(*bad)) {
+            continue;
+        }
+        if !seen.insert(host.clone()) {
+            continue;
+        }
+        items.push(json!({ "url": format!("https://{host}"), "host": host }));
+        if items.len() >= MIRROR_MAX {
+            break;
+        }
+    }
+    items
+}
+
+/// 从 HTML 里取出 `href="https://<host>/…"` 的 host（去重交给调用方）。
+fn href_hosts(html: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = html;
+    while let Some(i) = rest.find("href=\"https://") {
+        let after = &rest[i + 14..];
+        let end = after.find('"').unwrap_or(after.len());
+        let host = after[..end]
+            .split('/')
+            .next()
+            .unwrap_or_default()
+            .split('?')
+            .next()
+            .unwrap_or_default();
+        if !host.is_empty() {
+            out.push(host.to_string());
+        }
+        rest = &after[end..];
+    }
+    out
 }
 
 /// 可达性探测（并发 6 条一组）。只报结果，不做自动切换。
@@ -252,6 +319,15 @@ var foreverUrls = [
     fn picks_script_src() {
         let html = r#"<link rel="stylesheet" href="publish.css?1" /><script type="text/javascript" src="publish.js?20261103-2"></script>"#;
         assert_eq!(script_src(html).as_deref(), Some("publish.js?20261103-2"));
+    }
+
+    #[test]
+    fn extracts_href_hosts() {
+        let html = r#"<a href="https://gnpra.adihsppe.cc/ai-huanlian/">a</a><a href="https://huangguoai.com/terms/?x=1">b</a><a href="https://t.me/huangguofans">c</a>"#;
+        assert_eq!(
+            href_hosts(html),
+            vec!["gnpra.adihsppe.cc", "huangguoai.com", "t.me"]
+        );
     }
 
     /// 手动跑：`cargo test --lib -- --ignored lines::tests::mirrors_live -- --nocapture`
