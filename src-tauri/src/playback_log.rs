@@ -256,6 +256,16 @@ pub fn playback_log_read() -> Result<String, String> {
             text.push_str(&fs::read_to_string(path).map_err(|_| "无法读取日志")?);
         }
     }
+    // 连带始终在写的 debug.log 尾部：用户反馈「暂无播放地址」时，真正有用的
+    // status/msg 只在 debug.log 里；没有它，这份导出就缺最关键的一段。
+    if let Ok(bytes) = fs::read(dir.join("debug.log")) {
+        let start = bytes.len().saturating_sub(64 * 1024);
+        let tail = String::from_utf8_lossy(&bytes[start..]);
+        if !tail.trim().is_empty() {
+            text.push_str("\n--- debug.log（尾部 64KB，始终记录）---\n");
+            text.push_str(&tail);
+        }
+    }
     Ok(text)
 }
 

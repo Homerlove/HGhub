@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, cover, fmt, fmtTime, isMobile, mediaUrl } from "../api";
+import { api, cover, fmt, fmtTime, isMobile, logLine, mediaUrl } from "../api";
 import type { Detail, Episode, Post, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Avatar, Img, Sheet } from "./ui";
@@ -243,6 +243,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       .then((info) => {
         if (!alive) return;
         const streamUrl = info?.streams?.main || info?.video_url;
+        // 接口本身成功但业务失败（status=0 / streams 为空）时不会进 call() 的 catch，
+        // 这里把原始 status/msg 落进 debug.log ——「暂无播放地址」的唯一现场证据。
+        const raw = info as unknown as Record<string, unknown>;
+        const streams = (raw.streams ?? {}) as Record<string, unknown>;
+        logLine(
+          `[play] id=${curId} ep=${curEp} status=${String(raw.status ?? "?")} msg=${String(raw.msg ?? "")}` +
+          ` main=${streams.main ? "y" : "n"} hevc=${streams.hevc ? "y" : "n"} video_url=${info?.video_url ? "y" : "n"}`,
+        );
         if (!streamUrl) throw new Error("暂无播放地址");
         setPlayUrls((m) => ({ ...m, [playKey]: streamUrl }));
         addHistory(curId, curEp);
