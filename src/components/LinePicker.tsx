@@ -36,6 +36,7 @@ export default function LinePicker({ open, onClose }: { open: boolean; onClose: 
   const { toast, setUser } = useStore();
   const [state, setState] = useState<LineState | null>(null);
   const [mirrors, setMirrors] = useState<LineItem[] | null>(null);
+  const [recommended, setRecommended] = useState<LineItem[] | null>(null);
   const [mirrorErr, setMirrorErr] = useState("");
   const [loadingMirrors, setLoadingMirrors] = useState(false);
   const [probes, setProbes] = useState<ProbeMap>({});
@@ -52,6 +53,7 @@ export default function LinePicker({ open, onClose }: { open: boolean; onClose: 
     try {
       const res = await api.lineMirrors();
       setMirrors(res?.items || []);
+      setRecommended(res?.recommended || []);
     } catch (e) {
       setMirrors([]);
       setMirrorErr((e as Error).message || "镜像线路获取失败");
@@ -130,6 +132,29 @@ export default function LinePicker({ open, onClose }: { open: boolean; onClose: 
           ))}
           {!fixed.length && <div className="px-3.5 py-3 text-[11px] text-mut">读取中…</div>}
         </div>
+
+        <div className="flex items-center gap-2 px-1 mt-4 mb-1.5">
+          <span className="text-[10.5px] font-semibold text-dim tracking-wide">推荐镜像</span>
+          <span className="text-[10px] text-dim">发布页实时推荐 · 靠前通常更快</span>
+        </div>
+        <div className="rounded-(--r-md) bg-s2 divide-y divide-s3 overflow-hidden">
+          {loadingMirrors && <div className="flex justify-center py-6"><div className="w-6 h-6 spinner" /></div>}
+          {!loadingMirrors && !recommended?.length && (
+            <div className="px-3.5 py-3 text-[11px] text-mut">推荐页里没有可用的镜像地址</div>
+          )}
+          {!loadingMirrors && (recommended || []).map((it) => (
+            <Row key={it.url} item={it} current={state?.base === it.url} probe={probes[it.url]}
+              busy={probing === it.url} disabled={busyAll} onPick={pick} onProbe={(u) => probe([{ url: u }], u)} />
+          ))}
+        </div>
+        {!loadingMirrors && !!recommended?.length && (
+          <div className="flex justify-end px-1 mt-2">
+            <button onClick={() => probe(recommended, "recommended")} disabled={busyAll}
+              className="text-[10.5px] text-primary pressable disabled:opacity-50">
+              {probing === "recommended" ? "检测中…" : `全部检测（${recommended.length}）`}
+            </button>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 px-1 mt-4 mb-1.5">
           <span className="text-[10.5px] font-semibold text-dim tracking-wide">镜像线路</span>
