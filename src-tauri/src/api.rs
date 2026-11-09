@@ -121,7 +121,7 @@ pub async fn line_auto() -> Result<Value, String> {
 
 /* ───────────────────────── 更新检查 ───────────────────────── */
 
-const REPO: &str = "Minireel/HGhub";
+const REPO: &str = "zxsos/HGhub";
 
 fn ver_parts(v: &str) -> Vec<u64> {
     v.trim()

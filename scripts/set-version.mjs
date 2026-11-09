@@ -58,4 +58,43 @@ update("src-tauri/tauri.conf.json", (j) => {
   j.bundle.android = { ...(j.bundle.android ?? {}), versionCode };
 });
 
+/* Cargo 侧也要跟着走：`check_update` 里的「当前版本」读的是 CARGO_PKG_VERSION，
+   只改 package.json 会出现「关于页 1.2.1、更新检查 1.2.0」的错位。 */
+const CARGO_PKG = "huangguo-client";
+
+function setCargoToml(rel) {
+  const p = path.join(root, rel);
+  const lines = fs.readFileSync(p, "utf8").split("\n");
+  let done = false;
+  const out = lines.map((line) => {
+    // 只换 [package] 段的第一处裸 version（依赖里的 { version = "1" } 不匹配行首）
+    if (!done && /^version\s*=\s*"/.test(line)) {
+      done = true;
+      return line.replace(/^version\s*=\s*"[^"]*"/, `version = "${raw}"`);
+    }
+    return line;
+  });
+  if (!done) throw new Error(`${rel} 里没找到 version = "..."`);
+  fs.writeFileSync(p, out.join("\n"));
+  console.log(`  ${rel} -> ${raw}`);
+}
+
+function setCargoLock(rel, pkgName) {
+  const p = path.join(root, rel);
+  const blocks = fs.readFileSync(p, "utf8").split("[[package]]");
+  let done = false;
+  const out = blocks.map((block) => {
+    const name = /^\s*name\s*=\s*"([^"]+)"/m.exec(block);
+    if (!name || name[1] !== pkgName) return block;
+    done = true;
+    return block.replace(/(^\s*version\s*=\s*)"[^"]*"/m, `$1"${raw}"`);
+  });
+  if (!done) throw new Error(`${rel} 里没找到 ${pkgName}`);
+  fs.writeFileSync(p, out.join("[[package]]"));
+  console.log(`  ${rel} -> ${raw} (${pkgName})`);
+}
+
+setCargoToml("src-tauri/Cargo.toml");
+setCargoLock("src-tauri/Cargo.lock", CARGO_PKG);
+
 console.log(`versionName=${raw}  versionCode=${versionCode}`);
