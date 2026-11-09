@@ -105,6 +105,8 @@ export default function LinePicker({ open, onClose }: { open: boolean; onClose: 
       if (next !== state?.base) setUser(null);
       setState((s) => (s ? { ...s, base: next } : s));
       toast(`线路已切换到 ${hostOf(next)}，跨站点需重新登录`, "ok");
+      // 走的是新域名了，列表页得重新拉一遍，否则还是旧线路的内容
+      window.dispatchEvent(new Event("hg:line-changed"));
     } catch (e) {
       toast((e as Error).message || "切换失败", "info");
     } finally {

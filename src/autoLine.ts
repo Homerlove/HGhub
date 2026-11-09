@@ -97,6 +97,8 @@ export async function pickLine(reason: string, force = false): Promise<void> {
           detail: { region, host: hostOf(r.base), ms: r.pick.ms },
         }),
       );
+      // 线路换了，页面上那些数据全是上一个域名拉的，让列表页重挂载重拉
+      window.dispatchEvent(new Event("hg:line-changed"));
     }
   } catch (e) {
     logLine(`[line] auto(${reason}) failed: ${(e as Error).message}`);
@@ -133,6 +135,7 @@ async function tryMain(reason: string): Promise<void> {
           detail: { region: "intl", host: hostOf(r.base), ms: r.probe.ms },
         }),
       );
+      window.dispatchEvent(new Event("hg:line-changed"));
     }
   } catch (e) {
     logLine(`[line] main(${reason}) failed: ${(e as Error).message}`);

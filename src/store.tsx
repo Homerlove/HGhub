@@ -132,6 +132,8 @@ type Store = {
   searchHist: string[]; addSearch: (q: string) => void; clearSearchHist: () => void;
   strictSecurity: boolean; strictSecurityReady: boolean; securityPending: boolean; cliRelaxed: boolean; setStrictSecurity: (on: boolean) => Promise<void>;
   toasts: Toast[]; toast: (msg: string, icon?: Toast["icon"]) => void;
+  /** 线路切换计数：变了就让列表页重挂载，重新拉一遍数据 */
+  lineEpoch: number;
 };
 
 const Ctx = createContext<Store>(null as unknown as Store);
@@ -146,6 +148,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [lineEpoch, setLineEpoch] = useState(0);
   const [theater, setTheaterState] = useState(false);
   const [fs, setFsState] = useState(false);
   const [strictSecurity, setStrictSecurityState] = useState<boolean>(isStrictSecurity);
@@ -205,6 +208,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
     window.addEventListener("hg:line", onLine);
     return () => window.removeEventListener("hg:line", onLine);
+  }, []);
+  /** 线路真的换了（自动、手切都算）：
+   *
+   * 旧数据全是在上一个域名上拉的，留着等于对着一条死链路。但各列表页只在
+   * 挂载时拉一次，所以这里给一个递增的 key，让它们重挂载、重新请求。
+   */
+  useEffect(() => {
+    const bump = () => setLineEpoch((n) => n + 1);
+    window.addEventListener("hg:line-changed", bump);
+    return () => window.removeEventListener("hg:line-changed", bump);
   }, []);
 
   const setTab = useCallback((t: Tab) => { setTabRaw(t); setStack([]); }, []);
@@ -298,11 +311,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     muteOnStartup: p.muteOnStartup, setMuteOnStartup,
     searchHist: p.searchHist, addSearch, clearSearchHist,
     strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
-    toasts, toast,
+    toasts, toast, lineEpoch,
   }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     setMuted, setMuteOnStartup, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
-    toasts, toast, theater, setTheater, fs, setFs]);
+    toasts, toast, lineEpoch, theater, setTheater, fs, setFs]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
