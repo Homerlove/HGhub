@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { fmtTime, playlist } from "../api";
 import { mediaErrorMessage } from "../mediaErrors";
-import { mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
+import { mediaHost, mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
 import { usePlaybackActivity } from "../usePlaybackActivity";
 import { useSeekInput } from "../useSeekInput";
 import PlaybackLock from "./PlaybackLock";
@@ -59,7 +59,7 @@ export default function Player({
     setErrMsg("");
     setWaiting(false);
     const url = playlist(src);
-    trace("source.load", { engine: Hls.isSupported() ? "hls.js" : "native", auto_play: autoPlay });
+    trace("source.load", { engine: Hls.isSupported() ? "hls.js" : "native", auto_play: autoPlay, resource: mediaResource(src), host: mediaHost(src) });
 
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
