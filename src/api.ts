@@ -162,12 +162,17 @@ export const api = {
 
   /* 更新检查：对比 GitHub Release 的 tag */
   checkUpdate: () => call<UpdateInfo>("check_update"),
+  /* 应用内更新：下载安装包（直连失败逐个走加速源）→ 交给系统安装器 */
+  downloadUpdate: (url: string, name: string) => call<string>("download_update", { url, name }),
+  installUpdate: (path: string) => call<void>("install_update", { path }),
   openUrl: (url: string) => call<void>("open_url", { url }),
 };
 
 /* ── 更新检查 ───────────────────────────────────────────── */
 
 export type UpdateInfo = {
+  /** 当前平台对应的安装包；没有就是这次 release 没给本平台出包 */
+  asset?: { name: string; url: string } | null;
   current: string;
   latest: string;
   tag?: string;
