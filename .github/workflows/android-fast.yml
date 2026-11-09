@@ -1,0 +1,142 @@
+name: Android Fast (arm64)
+
+# 只编 arm64，不做 LTO，全量复用缓存。目标：单次 3~6 分钟出可用 APK。
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: android-fast-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: "true"
+  # 覆盖 Cargo.toml 的 [profile.release]：LTO 关掉、codegen-units 放开
+  # 编译时间大幅下降，so 体积略增（播放器场景无感）
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: "2"
+  CARGO_PROFILE_RELEASE_STRIP: "true"
+
+jobs:
+  arm64:
+    name: Android arm64 (fast)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 版本号对齐 tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Android SDK / NDK（已预装则跳过下载）
+        run: |
+          SDK="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          NDKV=28.2.13676358
+          echo "NDK_HOME=$SDK/ndk/$NDKV" >> "$GITHUB_ENV"
+          need=""
+          [ -d "$SDK/ndk/$NDKV" ] || need="$need ndk;$NDKV"
+          [ -d "$SDK/platforms/android-36" ] || need="$need platforms;android-36"
+          [ -d "$SDK/build-tools/36.0.0" ] || need="$need build-tools;36.0.0"
+          [ -d "$SDK/platform-tools" ] || need="$need platform-tools"
+          if [ -n "$need" ]; then
+            SDKM="$SDK/cmdline-tools/latest/bin/sdkmanager"
+            yes | "$SDKM" --licenses > /dev/null 2>&1 || true
+            echo "需要安装:$need"
+            "$SDKM" --install $need
+          else
+            echo "SDK / NDK 已在镜像里，跳过下载"
+          fi
+          ls "$SDK/ndk"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: android-arm64-fast
+          cache-on-failure: true
+
+      - name: Gradle 缓存
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('src-tauri/**/*.gradle*') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 生成 Android 工程
+        run: pnpm tauri android init --ci
+
+      - name: 编译 APK（arm64）
+        run: pnpm tauri android build --apk --target aarch64
+
+      - name: 签名 APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          KS="$RUNNER_TEMP/release.keystore"
+          ALIAS="${KEY_ALIAS:-hghub}"
+          SP="${STORE_PASSWORD:-hghubpass}"
+          KP="${KEY_PASSWORD:-hghubpass}"
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::未提供 ANDROID_KEY_BASE64，自动生成临时签名密钥（仅调试用）"
+            keytool -genkeypair -keystore "$KS" -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$SP" -keypass "$KP" -dname "CN=HGhub Fork, O=Personal, C=CN"
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          fi
+          BT="$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$BT/apksigner"
+          mkdir -p artifacts
+          found=0
+          for f in $(find src-tauri/gen/android/app/build/outputs/apk -name '*-release*.apk'); do
+            abi="$(basename "$(dirname "$(dirname "$f")")")"
+            out="artifacts/HGhub_${VERSION}_${abi}.apk"
+            "$APKSIGNER" sign \
+              --ks "$KS" --ks-key-alias "$ALIAS" \
+              --ks-pass "pass:$SP" --key-pass "pass:$KP" \
+              --v4-signing-enabled false \
+              --out "$out" "$f"
+            "$APKSIGNER" verify --print-certs "$out" | head -3
+            found=$((found+1))
+          done
+          rm -f "$KS"
+          if [ "$found" -eq 0 ]; then echo "::error::没有找到 release APK"; exit 1; fi
+          ls -lh artifacts
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-arm64-fast
+          path: artifacts/*
+          if-no-files-found: error
