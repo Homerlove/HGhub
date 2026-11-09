@@ -173,6 +173,11 @@ fn version_in(text: &str) -> String {
     String::new()
 }
 
+/// 线路体检：探一次 `/api/videos`，和自动选线用同一个判据。
+#[tauri::command]
+pub async fn line_health() -> Result<Value, String> {
+    Ok(crate::lines::health().await)
+}
 /// 对比 GitHub Release 的 tag 与当前版本（未认证 60 次/小时/IP，够用）。
 #[tauri::command]
 pub async fn check_update() -> Result<Value, String> {

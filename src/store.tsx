@@ -37,7 +37,13 @@ export type PageInput =
   | { kind: "posts" }
   | { kind: "post"; id: number };
 
-export type Toast = { id: number; msg: string; icon?: "ok" | "heart" | "star" | "info" };
+export type Toast = {
+  id: number;
+  msg: string;
+  icon?: "ok" | "heart" | "star" | "info";
+  /** 线路切换专用的结构化内容，有这个就不看 msg */
+  line?: { region: "cn" | "intl"; host: string; ms: number };
+};
 
 /** 观看记录：看到第几集、第几秒（`dur` 用来判断是否已看完） */
 export type WatchProgress = { id: number; ep: number; t: number; dur: number; at: number };
@@ -187,6 +193,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const id = ++toastSeq.current;
     setToasts((t) => [...t.slice(-2), { id, msg, icon }]);
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2200);
+  }, []);
+  /** 自动选线切换成功后由 `autoLine.ts` 派发，这里只负责显示 */
+  useEffect(() => {
+    const onLine = (e: Event) => {
+      const d = (e as CustomEvent<{ region: "cn" | "intl"; host: string; ms: number }>).detail;
+      if (!d) return;
+      const id = ++toastSeq.current;
+      setToasts((t) => [...t.slice(-2), { id, msg: "", line: d }]);
+      window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
+    };
+    window.addEventListener("hg:line", onLine);
+    return () => window.removeEventListener("hg:line", onLine);
   }, []);
 
   const setTab = useCallback((t: Tab) => { setTabRaw(t); setStack([]); }, []);

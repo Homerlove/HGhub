@@ -5,6 +5,7 @@
 //! `publish.js` 里（`var urls` 域名数组 + `var subdomains` 子域数组，页面自己随机拼）。
 
 use serde_json::{json, Value};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 /// 固定线路：写死在客户端里，不依赖任何外部页面。
@@ -33,6 +34,37 @@ const MIRROR_MAX: usize = 60;
 /// 单条线路探测超时
 const PROBE_TIMEOUT: Duration = Duration::from_secs(8);
 
+/// 发布页推荐过的镜像 origin。严格模式下只有这些镜像允许携带凭据。
+///
+/// 国内只能走镜像，而镜像与主站同一后端；不认它们的话，切过去之后
+/// 已登录用户的每个带 token 请求都会被挡成「镜像线路仅供游客浏览」。
+/// 只记录**发布页真的给过的**地址，用户手填的域名不会进这张表。
+static TRUSTED_MIRRORS: RwLock<Vec<String>> = RwLock::new(Vec::new());
+fn remember_origin(origin: String) {
+    let mut list = TRUSTED_MIRRORS.write().unwrap_or_else(|e| e.into_inner());
+    if list.len() < 64 && !list.iter().any(|x| x == &origin) {
+        list.push(origin);
+    }
+}
+fn remember_mirror(host: &str) {
+    if let Some(origin) = crate::net::normalize_base(&format!("https://{host}")) {
+        remember_origin(origin);
+    }
+}
+/// 记下「选定的线路」本身。上次选过的线路要落盘、重启后还要能带 token，
+/// 所以这里也信任它一次。
+pub fn remember_line(url: &str) {
+    if let Some(origin) = crate::net::normalize_base(url) {
+        remember_origin(origin);
+    }
+}
+/// 这个 origin 是不是发布页推荐过的镜像。
+pub fn is_trusted_mirror(origin: &str) -> bool {
+    TRUSTED_MIRRORS
+        .read()
+        .map(|l| l.iter().any(|x| x == origin))
+        .unwrap_or(false)
+}
 pub fn fixed() -> Value {
     json!(FIXED
         .iter()
@@ -70,6 +102,7 @@ pub async fn mirrors() -> Result<Value, String> {
                 continue;
             }
             items.push(json!({ "url": format!("https://{host}"), "host": host }));
+            remember_mirror(&host);
             if items.len() >= MIRROR_MAX {
                 break 'outer;
             }
@@ -106,6 +139,7 @@ async fn recommend() -> Vec<Value> {
             continue;
         }
         items.push(json!({ "url": format!("https://{host}"), "host": host }));
+        remember_mirror(&host);
         if items.len() >= MIRROR_MAX {
             break;
         }
@@ -185,6 +219,8 @@ pub const AUTO_LINES: [(&str, &str); 2] = [
 const AUTO_PROBE_PATH: &str = "/api/videos?page=1&size=1";
 /// 探测超时：只在启动/换网时用，等太久不如直接用另一条。
 const AUTO_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
+/// 镜像最多探这么多条，够挑出快的了
+const AUTO_MIRROR_MAX: usize = 10;
 
 /// 一条候选线路的探测结果。
 #[derive(Clone)]
@@ -258,27 +294,59 @@ pub async fn auto_pick() -> Value {
         });
     }
 
-    // 主站不通（国内），走专线；专线也不通就保持当前线路不动
-    let cn_hit = probe_hit(cn_tier, cn_url).await;
-    let candidates = [main_hit.json(), cn_hit.json()];
-    if cn_hit.ok {
+    // 主站不通（国内）。`.ai` 只是落地页，`/api` 全 404，所以用它页面上挂的镜像。
+    let mut urls: Vec<String> = recommend()
+        .await
+        .iter()
+        .filter_map(|v| v.get("url").and_then(Value::as_str).map(str::to_string))
+        .take(AUTO_MIRROR_MAX)
+        .collect();
+    urls.dedup();
+    let mut handles = Vec::new();
+    for u in urls {
+        handles.push(tokio::spawn(async move { probe_hit("mirror", &u).await }));
+    }
+    let mut hits = vec![main_hit.clone()];
+    for h in handles {
+        if let Ok(hit) = h.await {
+            hits.push(hit);
+        }
+    }
+    hits.sort_by_key(|h| (!h.ok, h.ms));
+    let candidates: Vec<Value> = hits.iter().map(Hit::json).collect();
+    if let Some(h) = hits.first().filter(|h| h.ok) {
         return json!({
-            "base": cn_url,
-            "tier": cn_tier,
-            "ms": cn_hit.ms,
-            "reason": "fallback-cn",
+            "base": h.url,
+            "tier": h.tier,
+            "ms": h.ms,
+            "reason": "mirror-fallback",
             "candidates": candidates,
         });
     }
+    // 镜像也全不通：退回 `.ai`，首页还能开（接口会 404），总比卡在死链路上好
+    let (cn_tier, cn_url) = AUTO_LINES[1];
     json!({
-        "base": crate::net::base(),
-        "tier": "none",
+        "base": cn_url,
+        "tier": cn_tier,
         "ms": 0,
-        "reason": "all-unreachable",
+        "reason": "ai-only",
         "candidates": candidates,
     })
 }
-
+/// 判活「当前线路」：和 [`auto_pick`] 用同一个请求（`/api/videos?page=1&size=1`）。
+///
+/// 只看首页不行——`.ai` 首页 200、`/api` 全 404，首页判活会把体检结论骗成「通」，
+/// 于是坏线路一直不被换掉。这里探的是真接口，通就是真能出内容。
+pub async fn health() -> Value {
+    let current = crate::net::base();
+    let hit = probe_hit("current", &current).await;
+    json!({
+        "base": current,
+        "ok": hit.ok,
+        "ms": hit.ms,
+        "status": hit.status,
+    })
+}
 async fn get_text(url: &str) -> Result<String, String> {
     let resp = crate::net::get(url, Duration::from_secs(12), None, None).await?;
     if !resp.status().is_success() {

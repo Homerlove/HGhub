@@ -154,6 +154,7 @@ pub fn run() {
             api::line_mirrors,
             api::line_probe,
             api::line_auto,
+            api::line_health,
             api::check_update,
             api::open_url,
             api::api_login,

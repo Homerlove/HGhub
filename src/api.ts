@@ -49,18 +49,55 @@ export const playlist = (url: string) => `${LOCAL}/hls?u=${encodeURIComponent(ur
 /** 写一行到应用数据目录 debug.log（用户反馈「打不开」时要的就是它） */
 export const logLine = (msg: string) => invoke("debug_log", { msg }).catch(() => {});
 
+/** 网络类失败的样子：没有 HTTP 状态码，纯链路层（DNS / 连接 / 超时 / TLS） */
+const NET_FAIL = /dns|timed? ?out|timeout|connection|refused|reset|unreachable|broken pipe|tls|ssl|handshake|证书|网络|连接/i;
+/** 只读命令：链路抖动时可以安全重试一次；写操作绝不重试（避免重复提交） */
+const READ_ONLY = new Set([
+  "api_me", "api_feed", "api_category", "api_rank", "api_search",
+  "api_posts", "api_post", "api_post_comments", "api_video", "api_play", "api_comments",
+]);
+/** 给自动选线用的观察点。api.ts 不反向依赖 autoLine，避免循环 import。 */
+export type NetObserver = (r: { ok: boolean; cmd: string; msg?: string; networkish?: boolean }) => void;
+let netObserver: NetObserver | null = null;
+export const setNetObserver = (fn: NetObserver | null) => { netObserver = fn; };
+const notifyNet = (r: Parameters<NetObserver>[0]) => {
+  try { netObserver?.(r); } catch { /* 观察者不能影响请求本身 */ }
+};
+const failMessage = (msg: string, status?: string) =>
+  status
+    ? `服务器请求失败（HTTP ${status}），请稍后重试或在设置中切换线路`
+    : msg.length > 140 ? `${msg.slice(0, 140)}…` : msg;
+
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const once = () => invoke(cmd, args) as Promise<T>;
   try {
-    return (await invoke(cmd, args)) as T;
+    const r = await once();
+    notifyNet({ ok: true, cmd });
+    return r;
   } catch (e) {
     const msg = typeof e === "string" ? e : "请求失败，请检查网络";
     // 落盘完整错误链（dns error / connection refused / 证书错误…），toast 只显示截断版
     logLine(`[api] ${cmd} → ${msg}`);
     const status = /^HTTP (\d{3})\b/.exec(msg)?.[1];
-    if (status) {
-      throw new Error(`服务器请求失败（HTTP ${status}），请稍后重试或在设置中切换线路`);
+    const networkish = !status && NET_FAIL.test(msg);
+    notifyNet({ ok: false, cmd, msg, networkish });
+    // 线路可能正被自动切走：给切换留一点时间，只读请求重试一次，用户就不用看见这条错误
+    if (networkish && READ_ONLY.has(cmd)) {
+      logLine(`[api] ${cmd} 链路异常，1.2s 后重试一次`);
+      await new Promise((r) => setTimeout(r, 1200));
+      try {
+        const r = await once();
+        logLine(`[api] ${cmd} 重试成功`);
+        notifyNet({ ok: true, cmd });
+        return r;
+      } catch (e2) {
+        const again = typeof e2 === "string" ? e2 : msg;
+        const againStatus = /^HTTP (\d{3})\b/.exec(again)?.[1];
+        logLine(`[api] ${cmd} 重试仍失败 → ${again}`);
+        throw new Error(failMessage(again, againStatus));
+      }
     }
-    throw new Error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
+    throw new Error(failMessage(msg, status));
   }
 }
 
@@ -118,6 +155,8 @@ export const api = {
   lineMirrors: () => call<LineMirrors>("line_mirrors"),
   lineProbe: (urls: string[]) => call<LineProbe[]>("line_probe", { urls }),
   lineAuto: () => call<LineAuto>("line_auto"),
+  /* 线路体检：探一次 /api/videos，和自动选线同一判据 */
+  lineHealth: () => call<LineHealth>("line_health"),
 
   /* 更新检查：对比 GitHub Release 的 tag */
   checkUpdate: () => call<UpdateInfo>("check_update"),
@@ -143,6 +182,7 @@ export type LineItem = { name?: string; url: string; host?: string };
 export type LineState = { base: string; default: string; fixed: LineItem[] };
 export type LineMirrors = { source: string; script?: string; items: LineItem[]; recommended_source?: string; recommended: LineItem[] };
 export type LineProbe = { url: string; ok: boolean; status?: number; ms: number; error?: string };
+export type LineHealth = { base: string; ok: boolean; ms: number; status: number | null };
 
 /** 自动选线：只比 `.com` 与 `.ai` 两条，取通的那条、快的那条。 */
 export type LineAutoCandidate = {

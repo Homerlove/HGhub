@@ -121,9 +121,6 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IRefresh size={15} /></span>
               <div className="flex-1 min-w-0">
                 <div className="text-[12.5px] text-on">自动选择线路</div>
-                <div className="text-[10.5px] text-mut">
-                  启动比一次 com / ai，哪条通走哪条，都通取快的；换网、回前台、每分钟复查
-                </div>
               </div>
               <Toggle
                 on={autoLineOn}
