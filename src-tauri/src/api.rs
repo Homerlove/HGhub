@@ -250,11 +250,22 @@ pub async fn check_update() -> Result<Value, String> {
         }
     };
 
+    // 顺手把「这个平台该下哪个包」挑出来，前端好直接应用内更新
+    let assets = v.get("assets").and_then(Value::as_array).cloned().unwrap_or_default();
+    let asset = assets
+        .iter()
+        .filter_map(|a| {
+            let name = a.get("name").and_then(Value::as_str)?;
+            let url = a.get("browser_download_url").and_then(Value::as_str)?;
+            Some((name.to_string(), url.to_string()))
+        })
+        .find(|(n, _)| asset_matches(n));
     Ok(json!({
         "current": current,
         "latest": latest,
         "tag": tag,
         "has_update": !latest.is_empty() && is_newer(&latest, &current),
+        "asset": asset.map(|(name, url)| json!({ "name": name, "url": url })),
         "url": html,
         "name": v.get("name").and_then(|x| x.as_str()).unwrap_or(""),
         "published_at": v.get("published_at").and_then(|x| x.as_str()).unwrap_or(""),
@@ -263,6 +274,111 @@ pub async fn check_update() -> Result<Value, String> {
 }
 
 /// 用系统默认浏览器打开链接（只允许 http/https）。
+/// 这个平台该更新哪个包：安卓 arm64 的 apk、Windows 的 exe、macOS 的 dmg、Linux 的 deb。
+fn asset_matches(name: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    if cfg!(target_os = "android") {
+        n.ends_with(".apk") && (n.contains("arm64") || n.contains("aarch64") || !n.contains("x86"))
+    } else if cfg!(target_os = "windows") {
+        n.ends_with(".exe")
+    } else if cfg!(target_os = "macos") {
+        n.ends_with(".dmg")
+    } else {
+        n.ends_with(".deb") || n.ends_with(".appimage")
+    }
+}
+
+/// GitHub 下载加速：国内直连 release 资产基本拉不动，逐个试。
+const UPDATE_PROXIES: [&str; 3] = [
+    "https://ghfast.top",
+    "https://gh-proxy.com",
+    "https://ghproxy.net",
+];
+
+async fn fetch_update_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let resp = crate::net::get(
+        url,
+        std::time::Duration::from_secs(180),
+        Some("application/octet-stream"),
+        None,
+    )
+    .await?;
+    if !resp.status().is_success() {
+        return Err(format!("HTTP {}", resp.status()));
+    }
+    let bytes = resp.bytes().await.map_err(|e| crate::net::err_text(&e))?;
+    Ok(bytes.to_vec())
+}
+
+/// 应用内更新第一步：把安装包拉到本机缓存。
+///
+/// 顺序是「直连 → 三个加速源」，谁先成用谁；拉回来太小的当失败（加速源
+/// 常常 200 回来一段 HTML 错误页，不能写进文件当 apk）。
+#[tauri::command]
+pub async fn download_update(
+    app: tauri::AppHandle,
+    url: String,
+    name: String,
+) -> Result<String, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| e.to_string())?
+        .join("update");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '+') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let target = dir.join(if safe.is_empty() { "update.bin".into() } else { safe });
+
+    let mut tried: Vec<String> = vec![url.clone()];
+    for proxy in UPDATE_PROXIES {
+        tried.push(format!("{proxy}/{url}"));
+    }
+    let mut last = String::from("未知错误");
+    for u in tried {
+        let proxied = u != url;
+        match fetch_update_bytes(&u).await {
+            Ok(bytes) if bytes.len() > 512 * 1024 => {
+                std::fs::write(&target, &bytes).map_err(|e| e.to_string())?;
+                crate::playback_log::record(
+                    "update.downloaded",
+                    json!({ "bytes": bytes.len(), "via_proxy": proxied }),
+                );
+                return Ok(target.to_string_lossy().to_string());
+            }
+            Ok(bytes) => last = format!("{} 只回来 {} 字节", if proxied { "加速源" } else { "直连" }, bytes.len()),
+            Err(e) => last = format!("{}: {e}", if proxied { "加速源" } else { "直连" }),
+        }
+    }
+    Err(format!(
+        "下载失败（直连和 {} 个加速源都没成）：{last}",
+        UPDATE_PROXIES.len()
+    ))
+}
+
+/// 应用内更新第二步：把安装包交给系统。
+///
+/// 安卓走 FileProvider + ACTION_VIEW，系统弹安装器（首次会问「允许来自此来源」）；
+/// 桌面直接把文件丢给默认程序。
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle, path: String) -> Result<(), String> {
+    if !std::path::Path::new(&path).exists() {
+        return Err("安装包不见了，重新下载一次".to_string());
+    }
+    app.opener()
+        .open_path(path, None::<&str>)
+        .map_err(|e| format!("调不起安装器：{e}"))
+}
+
 #[tauri::command]
 pub async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let target = crate::network_policy::parse_target(&url)?;

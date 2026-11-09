@@ -19,6 +19,8 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
   const [autoLineOn, setAutoLineOn] = useState(autoLineEnabled());
   const [checking, setChecking] = useState(false);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
+  /** 应用内更新进行到哪一步（空串=没在更新） */
+  const [updating, setUpdating] = useState("");
   const playbackLog = usePlaybackLog();
   const [copyingLog, setCopyingLog] = useState(false);
 
@@ -38,6 +40,29 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
       toast((e as Error).message || "检查更新失败", "info");
     } finally {
       setChecking(false);
+    }
+  };
+  /** 应用内更新：下载安装包 → 交给系统安装器。
+   *
+   * 加速源在后端处理（直连 GitHub 拉不动时自动换），前端只等结果。
+   */
+  const doUpdate = async () => {
+    if (!update) return;
+    if (!update.asset) {
+      api.openUrl(update.url).catch(() => {});
+      return;
+    }
+    setUpdating("下载中…");
+    try {
+      const path = await api.downloadUpdate(update.asset.url, update.asset.name);
+      setUpdating("调起安装器…");
+      await api.installUpdate(path);
+      setUpdate(null);
+      toast("下载完成，按系统提示安装即可", "ok");
+    } catch (e) {
+      toast((e as Error).message || "更新失败", "info");
+    } finally {
+      setUpdating("");
     }
   };
 
@@ -300,14 +325,21 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
             <div className="mt-3 max-h-[180px] scroll-y rounded-(--r-sm) bg-s2 p-3 text-[11px] text-mut whitespace-pre-wrap leading-relaxed">{update.notes}</div>
           )}
           <div className="flex gap-2 mt-4">
-            <button onClick={() => setUpdate(null)} className="flex-1 h-9 rounded-(--r-ctl) bg-s3 text-[12.5px] text-on/80 pressable">稍后</button>
+            <button onClick={() => setUpdate(null)} disabled={!!updating}
+              className="flex-1 h-9 rounded-(--r-ctl) bg-s3 text-[12.5px] text-on/80 pressable disabled:opacity-60">稍后</button>
+            <button onClick={() => void doUpdate()} disabled={!!updating}
+              className="flex-1 h-9 rounded-(--r-ctl) bg-primary text-[12.5px] font-semibold text-on-primary pressable disabled:opacity-60">
+              {updating || (update?.asset ? "立即更新" : "前往下载")}
+            </button>
+          </div>
+          {!!update?.asset && (
             <button onClick={() => {
               if (!update) return;
               api.openUrl(update.url).catch(() => {
                 navigator.clipboard?.writeText(update.url).then(() => toast("下载地址已复制", "ok")).catch(() => {});
               });
-            }} className="flex-1 h-9 rounded-(--r-ctl) bg-primary text-[12.5px] font-semibold text-on-primary pressable">前往下载</button>
-          </div>
+            }} className="w-full h-9 mt-2 rounded-(--r-ctl) bg-s3 text-[12px] text-on/80 pressable">浏览器打开</button>
+          )}
           <div className="text-[10px] text-dim mt-2.5 break-all">{update?.url}</div>
         </div>
       </Modal>
