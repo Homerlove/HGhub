@@ -259,7 +259,8 @@ pub async fn check_update() -> Result<Value, String> {
             let url = a.get("browser_download_url").and_then(Value::as_str)?;
             Some((name.to_string(), url.to_string()))
         })
-        .find(|(n, _)| asset_matches(n));
+        .filter(|(n, _)| asset_rank(n) > 0)
+        .max_by_key(|(n, _)| asset_rank(n));
     Ok(json!({
         "current": current,
         "latest": latest,
@@ -274,17 +275,42 @@ pub async fn check_update() -> Result<Value, String> {
 }
 
 /// 用系统默认浏览器打开链接（只允许 http/https）。
-/// 这个平台该更新哪个包：安卓 arm64 的 apk、Windows 的 exe、macOS 的 dmg、Linux 的 deb。
-fn asset_matches(name: &str) -> bool {
+/// 这个平台该更新哪个包，数字越大越优先。
+///
+/// 安卓的 release 里同时有 arm64 / arm(v7) / x86_64 三个 apk，光看「是不是 apk」
+/// 会先撞上 armv7 那个，64 位机器就降到 32 位跑了。所以按架构给分，取最高。
+fn asset_rank(name: &str) -> u8 {
     let n = name.to_ascii_lowercase();
     if cfg!(target_os = "android") {
-        n.ends_with(".apk") && (n.contains("arm64") || n.contains("aarch64") || !n.contains("x86"))
+        if !n.ends_with(".apk") {
+            0
+        } else if cfg!(target_arch = "aarch64") {
+            if n.contains("arm64") || n.contains("aarch64") {
+                3
+            } else {
+                1
+            }
+        } else if cfg!(target_arch = "x86_64") {
+            if n.contains("x86_64") {
+                3
+            } else {
+                1
+            }
+        } else if n.contains("x86") || n.contains("arm64") {
+            1
+        } else {
+            2
+        }
     } else if cfg!(target_os = "windows") {
-        n.ends_with(".exe")
+        if n.ends_with(".exe") { 3 } else { 0 }
     } else if cfg!(target_os = "macos") {
-        n.ends_with(".dmg")
+        if n.ends_with(".dmg") { 3 } else { 0 }
+    } else if n.ends_with(".deb") {
+        3
+    } else if n.ends_with(".appimage") {
+        2
     } else {
-        n.ends_with(".deb") || n.ends_with(".appimage")
+        0
     }
 }
 
