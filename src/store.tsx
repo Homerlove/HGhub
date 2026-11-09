@@ -3,7 +3,7 @@ import { api, platform as envPlatform } from "./api";
 import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./html";
 import type { User } from "./types";
 
-export type Platform = "android" | "ios" | "windows" | "macos";
+export type Platform = "android" | "ios" | "windows" | "macos" | "linux";
 export type Theme = "dark" | "light";
 export type Tab = "home" | "search" | "category" | "profile";
 

@@ -144,7 +144,7 @@ function AppBody() {
   );
 }
 
-/* ============ 桌面窗口壳（Windows / macOS）============ */
+/* ============ 桌面窗口壳（Windows / macOS / Linux）============ */
 function DesktopShell() {
   const [collapsed, setCollapsed] = useState(false);
   const { theater, platform } = useStore();
@@ -154,8 +154,8 @@ function DesktopShell() {
       <div className="relative flex-1 min-h-0">
         <ShellInner collapsed={collapsed || theater} theater={theater} />
       </div>
-      {/* 边缘缩放热区只对无边框窗口（Windows）有效，macOS 走原生窗口边框 */}
-      {platform === "windows" && <ResizeHandles />}
+      {/* 边缘缩放热区只对无边框窗口（Windows / Linux）有效，macOS 走原生窗口边框 */}
+      {(platform === "windows" || platform === "linux") && <ResizeHandles />}
     </div>
   );
 }
