@@ -155,6 +155,8 @@ export const api = {
   lineMirrors: () => call<LineMirrors>("line_mirrors"),
   lineProbe: (urls: string[]) => call<LineProbe[]>("line_probe", { urls }),
   lineAuto: () => call<LineAuto>("line_auto"),
+  /* 当前是镜像时敲一次主站，通了就切回（不清会话） */
+  lineTryMain: () => call<LineTryMain>("line_try_main"),
   /* 线路体检：探一次 /api/videos，和自动选线同一判据 */
   lineHealth: () => call<LineHealth>("line_health"),
 
@@ -204,6 +206,14 @@ export type LineAuto = {
     reason: string;
     candidates: LineAutoCandidate[];
   };
+};
+
+/** 回切主站的探测结果：`probe.ok` 为主站到底通不通 */
+export type LineTryMain = {
+  previous: string;
+  base: string;
+  switched: boolean;
+  probe: { ok: boolean; base: string; tier: string; ms: number; status: number | null };
 };
 
 /** `https://a.b/c` → `a.b`（线路展示用） */

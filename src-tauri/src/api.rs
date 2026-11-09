@@ -119,6 +119,31 @@ pub async fn line_auto() -> Result<Value, String> {
     }))
 }
 
+/// 当前走的是镜像时，敲一次主站：通了就切回（不清会话）。
+///
+/// 和 [`line_auto`] 的分工：[`line_auto`] 是「整体比一次」，要抓发布页；
+/// 这个只问一句「主站现在通不通」，代价一个请求，可以频繁调用。
+#[tauri::command]
+pub async fn line_try_main() -> Result<Value, String> {
+    crate::net::refresh_client();
+    let probe = crate::lines::try_main().await;
+    let previous = base();
+    let mut switched = false;
+    if probe.get("ok").and_then(Value::as_bool).unwrap_or(false) {
+        let chosen = probe.get("base").and_then(Value::as_str).unwrap_or_default();
+        if !chosen.is_empty() && chosen != previous {
+            let next = crate::net::set_base(chosen)?;
+            switched = next != previous;
+        }
+    }
+    Ok(json!({
+        "previous": previous,
+        "base": crate::net::base(),
+        "switched": switched,
+        "probe": probe,
+    }))
+}
+
 /* ───────────────────────── 更新检查 ───────────────────────── */
 
 const REPO: &str = "zxsos/HGhub";

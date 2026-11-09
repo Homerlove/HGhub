@@ -17,9 +17,10 @@ const PUBLISH_PAGE: &str = "https://huangguoai.pages.dev/";
 /// 推荐镜像源：这个页面每次打开都会重挑线路，正好当「推荐镜像组」的来源。
 const RECOMMEND_PAGE: &str = "https://huangguoai.ai/";
 /// 推荐页里会出现、但不是站点本体的域名（地址发布页 / 下载站 / 图床 / 统计 / 跳转）。
-const NOT_SITE: [&str; 10] = [
+const NOT_SITE: [&str; 11] = [
     "pages.dev",
     "huangguoai.ai",
+    "huangguoai.com",
     "huangguoju.com",
     "gvsnzgbim.cc",
     "hgai12.com",
@@ -112,7 +113,21 @@ pub async fn mirrors() -> Result<Value, String> {
         return Err("地址发布页里没有可用的镜像地址".to_string());
     }
 
-    let recommended = recommend().await;
+    let mut recommended = recommend().await;
+    // 发布页每次给的子域都不一样（服务端随机拼），自动选线选中的那条
+    // 往往不在这一批里。把当前线路补到最前面，用户一眼能看到「我正走这条」。
+    let current = crate::net::base();
+    if let Some(host) = url::Url::parse(&current)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+    {
+        if !recommended
+            .iter()
+            .any(|v| v.get("url").and_then(Value::as_str) == Some(current.as_str()))
+        {
+            recommended.insert(0, json!({ "url": current, "host": host }));
+        }
+    }
     Ok(json!({
         "source": PUBLISH_PAGE,
         "script": js_url,
@@ -331,6 +346,22 @@ pub async fn auto_pick() -> Value {
         "ms": 0,
         "reason": "ai-only",
         "candidates": candidates,
+    })
+}
+/// 只在「当前走的不是主站」时用：探一次主站，通了就切回，不通保持原状。
+///
+/// 比 [`auto_pick`] 便宜得多——不抓发布页、不并发探镜像，就一个请求。
+/// 解决的是「挂着代理却一直待在镜像上」：镜像自己也是通的，体检看不出任何问题，
+/// 只有主动敲一下主站，才知道现在能不能回去。
+pub async fn try_main() -> Value {
+    let (tier, url) = AUTO_LINES[0];
+    let hit = probe_hit(tier, url).await;
+    json!({
+        "ok": hit.ok,
+        "base": hit.url,
+        "tier": tier,
+        "ms": hit.ms,
+        "status": hit.status,
     })
 }
 /// 判活「当前线路」：和 [`auto_pick`] 用同一个请求（`/api/videos?page=1&size=1`）。

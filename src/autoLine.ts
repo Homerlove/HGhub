@@ -20,6 +20,8 @@ const PICK_COOLDOWN_MS = 15_000;
 const HEALTH_STEPS = [60_000, 120_000, 300_000];
 /** 判不通后的复查间隔：4 秒，够快又不至于一秒一个请求 */
 const RECHECK_MS = 4_000;
+/** 断网时的重试间隔：网络回来时自己接上，不依赖 online 事件 */
+const OFFLINE_RETRY_MS = 30_000;
 
 export const autoLineEnabled = (): boolean => {
   try { return localStorage.getItem(KEY) !== "off"; } catch { return true; }
@@ -56,6 +58,12 @@ function schedule(delay: number) {
   stopTimer();
   if (!autoLineEnabled()) return;
   timer = window.setTimeout(() => {
+    // 断网就继续等，别把定时器停死：挂代理 / 切 VPN 时系统往往不派发 online，
+    // 一旦停表就再也起不来，表现就是「断了代理会切，连上代理却不切回去」。
+    if (navigator.onLine === false) {
+      schedule(OFFLINE_RETRY_MS);
+      return;
+    }
     // 后台不探：省电，也避免锁屏时白跑
     if (document.visibilityState === "visible") void check("timer");
     else schedule(HEALTH_STEPS[0]);
@@ -98,6 +106,40 @@ export async function pickLine(reason: string, force = false): Promise<void> {
   }
 }
 
+/** 主站 host。当前就在主站上时，没必要再敲它一次。 */
+const MAIN_HOST = "huangguoai.com";
+function isMain(base: string): boolean {
+  return hostOf(base) === MAIN_HOST;
+}
+/** 当前走的是镜像时调一次：敲主站，通了就切回并提示，不通保持原状。
+ *
+ * 为什么必须单独做这件事：体检探的是「当前线路」，镜像自己是通的，
+ * 所以体检永远结论健康，挂上代理也回不到主站。只有主动问主站一句才知道。
+ * 代价只有一个请求，所以跟着巡检节奏走（60s → 120s → 300s）。
+ */
+async function tryMain(reason: string): Promise<void> {
+  if (!autoLineEnabled() || picking) return;
+  picking = true;
+  try {
+    const r = await api.lineTryMain();
+    lastPickAt = Date.now();
+    logLine(
+      `[line] main(${reason}) ok=${r.probe.ok} ms=${r.probe.ms} ` +
+        `switched=${r.switched} base=${hostOf(r.base)}`,
+    );
+    if (r.switched) {
+      window.dispatchEvent(
+        new CustomEvent("hg:line", {
+          detail: { region: "intl", host: hostOf(r.base), ms: r.probe.ms },
+        }),
+      );
+    }
+  } catch (e) {
+    logLine(`[line] main(${reason}) failed: ${(e as Error).message}`);
+  } finally {
+    picking = false;
+  }
+}
 /** 体检当前线路：探真接口，不算延迟阈值。连续两次不通才换。 */
 async function check(reason: string): Promise<void> {
   if (!autoLineEnabled() || checking) return;
@@ -112,6 +154,8 @@ async function check(reason: string): Promise<void> {
     if (h.ok) {
       downStreak = 0;
       step = Math.min(step + 1, HEALTH_STEPS.length - 1);
+      // 现在待在镜像上就顺手问问主站：通了代表已经有代理 / 出了国，该回去了
+      if (!isMain(h.base)) await tryMain(reason);
       schedule(HEALTH_STEPS[step]);
       return;
     }
@@ -161,7 +205,8 @@ function attach(): void {
   });
   window.addEventListener("offline", () => {
     logLine("[line] offline，暂停巡检");
-    stopTimer();
+    // 不停表：恢复后自己接上，不依赖 online 事件
+    schedule(OFFLINE_RETRY_MS);
   });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") {

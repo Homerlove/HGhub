@@ -147,7 +147,7 @@ export default function LinePicker({ open, onClose }: { open: boolean; onClose: 
 
         <GroupHead
           title="推荐镜像"
-          hint="发布页实时推荐 · 靠前通常更快"
+          hint="发布页每次换一批 · 当前线路置顶"
           actions={
             recommended?.length ? (
               <button onClick={() => probe(recommended, "recommended")} disabled={busyAll}
