@@ -117,6 +117,7 @@ export const api = {
   lineSet: (url: string) => call<string>("line_set", { url }),
   lineMirrors: () => call<LineMirrors>("line_mirrors"),
   lineProbe: (urls: string[]) => call<LineProbe[]>("line_probe", { urls }),
+  lineAuto: () => call<LineAuto>("line_auto"),
 
   /* 更新检查：对比 GitHub Release 的 tag */
   checkUpdate: () => call<UpdateInfo>("check_update"),
@@ -142,6 +143,28 @@ export type LineItem = { name?: string; url: string; host?: string };
 export type LineState = { base: string; default: string; fixed: LineItem[] };
 export type LineMirrors = { source: string; script?: string; items: LineItem[]; recommended_source?: string; recommended: LineItem[] };
 export type LineProbe = { url: string; ok: boolean; status?: number; ms: number; error?: string };
+
+/** 自动选线：只比 `.com` 与 `.ai` 两条，取通的那条、快的那条。 */
+export type LineAutoCandidate = {
+  tier: "main" | "cn";
+  url: string;
+  ok: boolean;
+  reachable: boolean;
+  ms: number;
+  status: number | null;
+};
+export type LineAuto = {
+  previous: string;
+  base: string;
+  switched: boolean;
+  pick: {
+    base: string;
+    tier: "main" | "cn" | "none";
+    ms: number;
+    reason: string;
+    candidates: LineAutoCandidate[];
+  };
+};
 
 /** `https://a.b/c` → `a.b`（线路展示用） */
 export const hostOf = (url: string) => {

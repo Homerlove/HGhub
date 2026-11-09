@@ -92,6 +92,33 @@ pub async fn line_probe(urls: Vec<String>) -> Result<Value, String> {
     Ok(crate::lines::probe(urls).await)
 }
 
+/// 自动选线：`.com` 与 `.ai` 各探一次，选通的那条、快的那条。
+///
+/// 和 [`line_set`] 的区别是**不清会话**：两个域名是同一个站点，登录态本来就通用；
+/// 自动切换如果清会话，用户每换一次网络就被踢下线，那是不能接受的。
+#[tauri::command]
+pub async fn line_auto() -> Result<Value, String> {
+    crate::net::refresh_client();
+    let pick = crate::lines::auto_pick().await;
+    let chosen = pick
+        .get("base")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_string();
+    let previous = base();
+    let mut switched = false;
+    if !chosen.is_empty() && chosen != previous {
+        let next = crate::net::set_base(&chosen)?;
+        switched = next != previous;
+    }
+    Ok(json!({
+        "previous": previous,
+        "base": crate::net::base(),
+        "switched": switched,
+        "pick": pick,
+    }))
+}
+
 /* ───────────────────────── 更新检查 ───────────────────────── */
 
 const REPO: &str = "Minireel/HGhub";

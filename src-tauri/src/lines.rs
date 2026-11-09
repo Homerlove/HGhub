@@ -173,6 +173,114 @@ async fn probe_one(url: String) -> Value {
     }
 }
 
+/* ───────────────────────── 自动选线 ───────────────────────── */
+
+/// 自动选线的两条候选：主站（海外能连）与国内专线。
+/// 国内基本连不上 `.com`；在海外 `.ai` 会绕远，一定比 `.com` 慢。
+/// 所以直接比这两条就够：不判断地区、不扫镜像列表、不看延迟阈值。
+pub const AUTO_LINES: [(&str, &str); 2] = [
+    ("main", crate::net::DEFAULT_BASE),
+    ("cn", "https://huangguoai.ai"),
+];
+
+/// 自动探测比手动探测短：这个超时只在启动/换网时用，等太久不如直接用另一条。
+const AUTO_PROBE_TIMEOUT: Duration = Duration::from_secs(4);
+
+/// 一条候选线路的探测结果。
+#[derive(Clone)]
+pub struct Hit {
+    pub tier: &'static str,
+    pub url: String,
+    pub ok: bool,
+    pub reachable: bool,
+    pub ms: u64,
+    pub status: Option<u16>,
+}
+
+impl Hit {
+    fn json(&self) -> Value {
+        json!({
+            "tier": self.tier,
+            "url": self.url,
+            "ok": self.ok,
+            "reachable": self.reachable,
+            "ms": self.ms,
+            "status": self.status,
+        })
+    }
+}
+
+async fn probe_hit(tier: &'static str, url: &str) -> Hit {
+    let target = format!("{}/", url.trim_end_matches('/'));
+    let started = Instant::now();
+    let res = crate::net::get(
+        &target,
+        AUTO_PROBE_TIMEOUT,
+        Some("text/html,application/xhtml+xml"),
+        None,
+    )
+    .await;
+    let ms = started.elapsed().as_millis() as u64;
+    match res {
+        Ok(r) => {
+            let status = r.status().as_u16();
+            // 4xx 也说明域名后面是活的站点（鉴权、跳转都可能），只有 5xx / 网络错误才算不通
+            Hit {
+                tier,
+                url: url.to_string(),
+                ok: status < 400,
+                reachable: status < 500,
+                ms,
+                status: Some(status),
+            }
+        }
+        Err(_) => Hit {
+            tier,
+            url: url.to_string(),
+            ok: false,
+            reachable: false,
+            ms,
+            status: None,
+        },
+    }
+}
+
+/// 自动选线：`.com` 与 `.ai` 各探一次，通的、快的胜出。
+///
+/// 两条都不通时返回当前线路（`tier: "none"`），由调用方决定要不要提示用户。
+pub async fn auto_pick() -> Value {
+    let mut handles = Vec::new();
+    for (tier, url) in AUTO_LINES {
+        handles.push(tokio::spawn(async move { probe_hit(tier, url).await }));
+    }
+    let mut hits: Vec<Hit> = Vec::new();
+    for h in handles {
+        if let Ok(hit) = h.await {
+            hits.push(hit);
+        }
+    }
+    // 完全正常的优先，其次 4xx 也算活着，最后才比延迟
+    hits.sort_by_key(|h| (!h.ok, !h.reachable, h.ms));
+    let candidates: Vec<Value> = hits.iter().map(Hit::json).collect();
+
+    match hits.first().filter(|h| h.reachable).cloned() {
+        Some(h) => json!({
+            "base": h.url,
+            "tier": h.tier,
+            "ms": h.ms,
+            "reason": "fastest-reachable",
+            "candidates": candidates,
+        }),
+        None => json!({
+            "base": crate::net::base(),
+            "tier": "none",
+            "ms": 0,
+            "reason": "all-unreachable",
+            "candidates": candidates,
+        }),
+    }
+}
+
 async fn get_text(url: &str) -> Result<String, String> {
     let resp = crate::net::get(url, Duration::from_secs(12), None, None).await?;
     if !resp.status().is_success() {

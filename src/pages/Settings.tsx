@@ -3,6 +3,7 @@ import { api, APP_VERSION, hostOf, logLine, platform, type UpdateInfo } from "..
 import { useStore } from "../store";
 import { Modal, Toggle } from "../components/ui";
 import LinePicker from "../components/LinePicker";
+import { autoLineEnabled, pickLine, setAutoLine } from "../autoLine";
 import { copyPlaybackLog, initPlaybackLog, setPlaybackLog, usePlaybackLog } from "../playbackDiagnostics";
 import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRefresh, ISettings, ISun, IVolMute } from "../icons";
 
@@ -15,6 +16,7 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
   const [clearing, setClearing] = useState(false);
   const [lineOpen, setLineOpen] = useState(false);
   const [lineBase, setLineBase] = useState("");
+  const [autoLineOn, setAutoLineOn] = useState(autoLineEnabled());
   const [checking, setChecking] = useState(false);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const playbackLog = usePlaybackLog();
@@ -115,6 +117,24 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               </div>
               <IChevR size={15} className="text-mut" />
             </button>
+            <div className="flex items-center gap-3 px-3.5 py-3">
+              <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IRefresh size={15} /></span>
+              <div className="flex-1 min-w-0">
+                <div className="text-[12.5px] text-on">自动选择线路</div>
+                <div className="text-[10.5px] text-mut">
+                  启动比一次 com / ai，哪条通走哪条，都通取快的；换网、回前台、每分钟复查
+                </div>
+              </div>
+              <Toggle
+                on={autoLineOn}
+                onChange={(on) => {
+                  setAutoLine(on);
+                  setAutoLineOn(on);
+                  toast(on ? "已开启：线路跟着网络自动选" : "已关闭：改用手动选线");
+                  if (on) void pickLine("manual", true).then(readLine);
+                }}
+              />
+            </div>
             <div className="flex items-center gap-3 px-3.5 py-3">
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><ILockF size={15} /></span>
               <div className="flex-1 min-w-0">
