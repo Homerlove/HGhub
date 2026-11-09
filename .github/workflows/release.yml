@@ -140,11 +140,16 @@ jobs:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
-          if [ -z "${KEYSTORE_BASE64:-}" ]; then
-            echo "::error::缺少 ANDROID_KEY_BASE64 secret，无法签名"; exit 1
-          fi
           KS="$RUNNER_TEMP/release.keystore"
-          echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          ALIAS="${KEY_ALIAS:-hghub}"
+          SP="${STORE_PASSWORD:-hghubpass}"
+          KP="${KEY_PASSWORD:-hghubpass}"
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::warning::未提供 ANDROID_KEY_BASE64，自动生成临时签名密钥（仅调试用）"
+            keytool -genkeypair -keystore "$KS" -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 -storepass "$SP" -keypass "$KP" -dname "CN=HGhub Fork, O=Personal, C=CN"
+          else
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+          fi
           BT="$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)"
           APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$BT/apksigner"
           mkdir -p artifacts
@@ -153,8 +158,8 @@ jobs:
             abi="$(basename "$(dirname "$(dirname "$f")")")"
             out="artifacts/HGhub_${VERSION}_${abi}.apk"
             "$APKSIGNER" sign \
-              --ks "$KS" --ks-key-alias "$KEY_ALIAS" \
-              --ks-pass "pass:$STORE_PASSWORD" --key-pass "pass:$KEY_PASSWORD" \
+              --ks "$KS" --ks-key-alias "$ALIAS" \
+              --ks-pass "pass:$SP" --key-pass "pass:$KP" \
               --v4-signing-enabled false \
               --out "$out" "$f"
             "$APKSIGNER" verify --print-certs "$out" | head -3
