@@ -30,8 +30,12 @@ jobs:
           else
             V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           fi
+          # 版本号 + Android versionCode 一起写（Tauri 自己会忽略 +hg.N 后缀）
+          node scripts/set-version.mjs "$V"
+          CODE="$(node -p "require('./src-tauri/tauri.conf.json').bundle.android.versionCode")"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
+          echo "versionCode=$CODE" >> "$GITHUB_OUTPUT"
+          echo "versionName=$V  versionCode=$CODE"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -87,8 +91,12 @@ jobs:
           else
             V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           fi
+          # 版本号 + Android versionCode 一起写（Tauri 自己会忽略 +hg.N 后缀）
+          node scripts/set-version.mjs "$V"
+          CODE="$(node -p "require('./src-tauri/tauri.conf.json').bundle.android.versionCode")"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
+          echo "versionCode=$CODE" >> "$GITHUB_OUTPUT"
+          echo "versionName=$V  versionCode=$CODE"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -162,6 +170,9 @@ jobs:
           done
           rm -f "$KS"
           if [ "$found" -eq 0 ]; then echo "::error::没有找到 release APK"; exit 1; fi
+          # 打一下实际写进 APK 的 versionCode，升级链对不对看这行
+          AAPT2="$(ls "$ANDROID_SDK_ROOT"/build-tools/*/aapt2 | sort -V | tail -1)"
+          for a in artifacts/*.apk; do "$AAPT2" dump badging "$a" | grep -m1 "^package:"; done
           ls -lh artifacts
 
       - uses: actions/upload-artifact@v7
@@ -186,8 +197,12 @@ jobs:
           else
             V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           fi
+          # 版本号 + Android versionCode 一起写（Tauri 自己会忽略 +hg.N 后缀）
+          node scripts/set-version.mjs "$V"
+          CODE="$(node -p "require('./src-tauri/tauri.conf.json').bundle.android.versionCode")"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
+          echo "versionCode=$CODE" >> "$GITHUB_OUTPUT"
+          echo "versionName=$V  versionCode=$CODE"
 
       - uses: pnpm/action-setup@v6
         with:
@@ -241,8 +256,12 @@ jobs:
           else
             V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           fi
+          # 版本号 + Android versionCode 一起写（Tauri 自己会忽略 +hg.N 后缀）
+          node scripts/set-version.mjs "$V"
+          CODE="$(node -p "require('./src-tauri/tauri.conf.json').bundle.android.versionCode")"
           echo "version=$V" >> "$GITHUB_OUTPUT"
-          node -e "const fs=require('fs');for(const p of ['src-tauri/tauri.conf.json','package.json']){const j=JSON.parse(fs.readFileSync(p));j.version=process.argv[1];fs.writeFileSync(p,JSON.stringify(j,null,2)+'\n')}" "$V"
+          echo "versionCode=$CODE" >> "$GITHUB_OUTPUT"
+          echo "versionName=$V  versionCode=$CODE"
 
       # Tauri 2 在 Linux 上依赖 webkit2gtk-4.1；22.04 的 jammy-updates 已提供
       - name: 安装系统依赖
