@@ -13,18 +13,22 @@ export const isAndroid = /Android/i.test(ua);
 /** iPhone 的 UA 也带「like Mac OS X」，必须先于 macOS 判断；iPadOS 默认伪装成 Mac，用触点数区分。 */
 export const isIos = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
 export const isMacos = !isIos && /Macintosh|Mac OS X/i.test(ua);
-/** Linux 桌面：webkit2gtk 的 UA 是 X11; Linux x86_64。必须排在 Windows 之前判断，否则会被当成 Windows。 */
-export const isLinux = !isIos && !isMacos && /Linux|X11/i.test(ua);
+/** Linux 桌面：webkit2gtk 的 UA 是「X11; Linux x86_64」。必须排在 Windows 之前判断，
+ *  否则会被当成 Windows；而 Android 的 UA 里同样带「Linux」，所以必须先排除安卓。 */
+export const isLinux = !isAndroid && !isIos && !isMacos && /Linux|X11/i.test(ua);
 export const platform: "android" | "ios" | "windows" | "macos" | "linux" =
   isAndroid ? "android" : isIos ? "ios" : isMacos ? "macos" : isLinux ? "linux" : "windows";
 /** 移动端（安卓 / iOS）共用触屏界面 */
 export const isMobile = isAndroid || isIos;
 
-/** 自定义协议地址随平台不同（见 tauri `register_asynchronous_uri_scheme_protocol` 文档）：
- *  Windows / Android → `http://<scheme>.localhost`
- *  macOS / iOS / Linux → `<scheme>://localhost`
- *  Rust 侧 `src-tauri/src/lib.rs` 里改写 m3u8 用的 scheme 必须与此一致。 */
-export const LOCAL = isMacos || isIos || isLinux ? "hg://localhost" : "http://hg.localhost";
+/** 媒体基址随平台不同（Rust 侧对应 `media::LOCAL_ORIGIN`，两边必须一致）：
+ *  Windows / Android → `http://<scheme>.localhost`（自定义协议，WebView 自己加载）
+ *  macOS / iOS → `hg://localhost`（WebKit 的 scheme handler）
+ *  Linux → `http://127.0.0.1:17650`：WebKitGTK 的 <video> 由 GStreamer 播放，
+ *          它拿不到自定义 scheme，所以由 Rust 侧在 loopback 上起 HTTP 代理
+ *          （`src-tauri/src/linux_http.rs`，端口必须与此一致）。 */
+export const LOCAL =
+  isMacos || isIos ? "hg://localhost" : isLinux ? "http://127.0.0.1:17650" : "http://hg.localhost";
 
 /** src 是否已是本地协议地址（避免在详情页把代理地址再包一层） */
 export const isLocalMedia = (src: string) => src.startsWith(`${LOCAL}/`);

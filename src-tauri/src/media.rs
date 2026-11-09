@@ -20,7 +20,10 @@ use tauri::http::{Response, StatusCode};
 /// 前端 `src/api.ts` 的 `LOCAL` 必须与此一致，否则封面与视频全部加载失败。
 #[cfg(any(target_os = "windows", target_os = "android"))]
 pub const LOCAL_ORIGIN: &str = "http://hg.localhost";
-#[cfg(not(any(target_os = "windows", target_os = "android")))]
+/// Linux 走 loopback HTTP：WebKitGTK 的播放器是 GStreamer，它拿不到自定义 scheme。
+#[cfg(target_os = "linux")]
+pub const LOCAL_ORIGIN: &str = crate::linux_http::ORIGIN;
+#[cfg(not(any(target_os = "windows", target_os = "android", target_os = "linux")))]
 pub const LOCAL_ORIGIN: &str = "hg://localhost";
 
 const IMG_KEY: &[u8] = b"f5d965df75336270";
