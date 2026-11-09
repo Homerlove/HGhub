@@ -245,11 +245,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         const streamUrl = info?.streams?.main || info?.video_url;
         // 接口本身成功但业务失败（status=0 / streams 为空）时不会进 call() 的 catch，
         // 这里把原始 status/msg 落进 debug.log ——「暂无播放地址」的唯一现场证据。
+        // src 才是真正喂给播放器的值；video_url 是新接口不再返回的旧字段，别拿它判断成败。
         const raw = info as unknown as Record<string, unknown>;
         const streams = (raw.streams ?? {}) as Record<string, unknown>;
+        const kind = streams.main ? "main" : info?.video_url ? "video_url" : streams.hevc ? "hevc" : "-";
+        let host = "?";
+        try { host = new URL(streamUrl || "").host || "?"; } catch { /* 空地址或非 URL */ }
         logLine(
-          `[play] id=${curId} ep=${curEp} status=${String(raw.status ?? "?")} msg=${String(raw.msg ?? "")}` +
-          ` main=${streams.main ? "y" : "n"} hevc=${streams.hevc ? "y" : "n"} video_url=${info?.video_url ? "y" : "n"}`,
+          `[play] id=${curId} ep=${curEp} src=${streamUrl ? "y" : "n"} kind=${kind} host=${host}` +
+          (streamUrl ? "" : ` status=${String(raw.status ?? "?")} msg=${String(raw.msg ?? "")}`),
         );
         if (!streamUrl) throw new Error("暂无播放地址");
         setPlayUrls((m) => ({ ...m, [playKey]: streamUrl }));
