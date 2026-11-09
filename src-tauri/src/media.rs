@@ -403,7 +403,9 @@ mod tests {
         );
         let body = std::str::from_utf8(response.body()).unwrap();
         assert_eq!(body.matches(&format!("{LOCAL_ORIGIN}/seg?u=")).count(), 4);
-        assert!(!body.contains("URI=\"http://127.0.0.1"));
+        // Linux 上 LOCAL_ORIGIN 本身就是 `http://127.0.0.1:<port>`，
+        // 所以不能断言「不含 127.0.0.1」，要断言上游那条 key 地址已被代理包起来
+        assert!(!body.contains("URI=\"http://127.0.0.1/key\""));
         assert!(body.contains("https%3A%2F%2Fcdn%2Eexample%2Faudio%2Flist%2Em3u8"));
         assert_eq!(
             response.headers()["Content-Type"],
