@@ -144,6 +144,35 @@ fn is_newer(latest: &str, current: &str) -> bool {
     false
 }
 
+/// 从 tag / name 里取出 `x.y.z`。
+///
+/// 我们的 tag 是 `hgfix-1.2.1-r5`，上游是 `v1.2.0`，release name 是 `HGhub 1.2.1+hg.1`。
+/// 直接拿去比会从第一位就判负（`hgfix-1` 解析成 0），所以先抠出版本号。
+fn version_in(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut dots = 0;
+        let mut j = i;
+        while j < chars.len() && (chars[j].is_ascii_digit() || (chars[j] == '.' && dots < 2)) {
+            if chars[j] == '.' {
+                dots += 1;
+            }
+            j += 1;
+        }
+        if dots == 2 {
+            return chars[start..j].iter().collect();
+        }
+        i = j.max(i + 1);
+    }
+    String::new()
+}
+
 /// 对比 GitHub Release 的 tag 与当前版本（未认证 60 次/小时/IP，够用）。
 #[tauri::command]
 pub async fn check_update() -> Result<Value, String> {
@@ -181,12 +210,21 @@ pub async fn check_update() -> Result<Value, String> {
         .map(|s| s.to_string())
         .unwrap_or_else(|| format!("https://github.com/{REPO}/releases"));
     let notes = v.get("body").and_then(|x| x.as_str()).unwrap_or("");
+    // tag 是 `hgfix-1.2.1-r5`，不能直接拿整串比大小
+    let latest = {
+        let found = version_in(&tag);
+        if found.is_empty() {
+            tag.trim_start_matches(['v', 'V']).to_string()
+        } else {
+            found
+        }
+    };
 
     Ok(json!({
         "current": current,
-        "latest": tag.trim_start_matches(['v', 'V']).to_string(),
+        "latest": latest,
         "tag": tag,
-        "has_update": !tag.is_empty() && is_newer(&tag, &current),
+        "has_update": !latest.is_empty() && is_newer(&latest, &current),
         "url": html,
         "name": v.get("name").and_then(|x| x.as_str()).unwrap_or(""),
         "published_at": v.get("published_at").and_then(|x| x.as_str()).unwrap_or(""),
@@ -498,7 +536,7 @@ pub async fn api_post_comments(
 }
 #[cfg(test)]
 mod tests {
-    use super::is_newer;
+    use super::{is_newer, version_in};
     use serde_json::Value;
 
     #[test]
@@ -548,5 +586,17 @@ mod tests {
         assert!(!is_newer("v1.0.1", "1.0.1"));
         assert!(!is_newer("v0.9.9", "1.0.1"));
         assert!(!is_newer("", "1.0.1"));
+    }
+    /// tag 不是纯版本号：`hgfix-1.2.1-r5` 整串拿去比会从第一位判负（`hgfix-1` 解析成 0），
+    /// 结果就是「永远没有新版本」。所以先抠出 `x.y.z` 再比。
+    #[test]
+    fn reads_version_out_of_tag() {
+        assert_eq!(version_in("hgfix-1.2.1-r5"), "1.2.1");
+        assert_eq!(version_in("v1.2.0"), "1.2.0");
+        assert_eq!(version_in("HGhub 1.2.1+hg.1"), "1.2.1");
+        assert_eq!(version_in("release-notes"), "");
+        assert!(is_newer(&version_in("hgfix-1.2.2-r6"), "1.2.1+hg.1"));
+        assert!(is_newer(&version_in("hgfix-1.10.0-r9"), "1.9.9+hg.1"));
+        assert!(!is_newer(&version_in("hgfix-1.2.1-r5"), "1.2.1+hg.1"));
     }
 }
