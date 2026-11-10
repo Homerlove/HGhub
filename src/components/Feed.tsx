@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { api, cover, fmt, fmtTime, isMobile, logLine, mediaUrl } from "../api";
 import type { Detail, Episode, Post, VideoCard } from "../types";
 import { useStore } from "../store";
@@ -68,6 +69,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const theater = store.theater;
   const setTheater = store.setTheater;
   const fs = store.fs;
+  const clean = store.clean;
+  const setClean = store.setClean;
   const setFs = store.setFs;
 
   /* 桌面：鼠标闲置 2.8s 自动隐藏播放器 UI（沉浸） */
@@ -104,6 +107,12 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     x: number; y: number; startY: number; t: number; timer: number | null;
     mode: "idle" | "hold" | "scrub" | "pan"; base: number; width: number; playing: boolean;
   } | null>(null);
+  /* 单击 / 双击判定：单击净屏，双击暂停 */
+  const lastTapRef = useRef<{ timer: number | null }>({ timer: null });
+  /* 系统是否真的转成了横屏（iOS 原生旋转后为 true） */
+  const [vpLandscape, setVpLandscape] = useState(false);
+  /* 进出全屏过渡期多次续播，防止 iOS 把播放打断 */
+  const keepAliveTimers = useRef<number[]>([]);
 
   const curId = videoIds[index];
   const detail = details[curId];
@@ -181,7 +190,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 进度条显示百分比（拖动时用拖动值） */
   const barProgress = barPct ?? (duration ? time / duration : 0);
   /* 沉浸全屏 + 横屏视频 → 舞台旋转 90°，看起来就是横屏 */
-  const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0;
+  const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0 && !vpLandscape;
 
   /* ── 上下划切集 ──────────────────────────────────────────
    * 默认行为是「上下划 = 换下一部剧」。打开这个开关后，如果当前这部剧还有
@@ -457,7 +466,19 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       if (g.playing && active) videoRef.current?.play();
       return;
     }
-    if (!cancelled && g.mode === "idle" && Date.now() - g.t < 260) videoRef.current?.toggle();
+    if (!cancelled && g.mode === "idle" && Date.now() - g.t < 260) {
+      // 双击 = 暂停/播放；单击 = 净屏/还原（延迟 230ms 等第二击）
+      if (lastTapRef.current.timer) {
+        window.clearTimeout(lastTapRef.current.timer);
+        lastTapRef.current.timer = null;
+        videoRef.current?.toggle();
+      } else {
+        lastTapRef.current.timer = window.setTimeout(() => {
+          lastTapRef.current.timer = null;
+          setClean((v) => !v);
+        }, 230) as unknown as number;
+      }
+    }
   };
 
   useEffect(() => {
@@ -631,7 +652,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 style={{ background: "linear-gradient(0deg, rgba(8,11,15,.86) 0, rgba(11,14,20,.18) 26%, transparent 48%)" }} />
 
               {/* 顶部 */}
-              {!fs && mode === "context" ? (
+              {!fs && !clean && mode === "context" ? (
                 isDesktop ? (
                   <div className="desktop-context-header">
                     <button onClick={onBack} aria-label="返回"><IBack size={17} /></button>
@@ -649,7 +670,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
               {/* 右侧操作栏（移动端）：收藏 / 评论 / 全屏 / 分享
                   颜色写死不跟主题走：浅色主题下这些字必须仍是白色 */}
-              {!fs && !isDesktop && (
+              {!fs && !clean && !isDesktop && (
                 <div className="absolute right-3 z-20 flex flex-col items-center gap-[16px]"
                   style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset + 92}px)` }}>
                   <button onClick={onFav} className="flex flex-col items-center gap-1 pressable" aria-pressed={isFav(curId)} aria-label="收藏">
@@ -660,7 +681,10 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     <ICommentF size={26} className="hg-ink hg-ov-shadow" />
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">评论</span>
                   </button>
-                  <button onClick={() => setFs(true)} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
+                  <button onClick={() => {
+                    setFs(true);
+                    if (!isDesktop) { try { void invoke("set_orientation", { landscape: vsize.w > vsize.h && vsize.h > 0 }); } catch { /* ignore */ } }
+                  }} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
                     <IExpand size={26} className="hg-ink hg-ov-shadow" />
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">全屏</span>
                   </button>
@@ -672,7 +696,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               )}
 
               {/* 右侧操作栏（桌面） */}
-              {!fs && isDesktop && (
+              {!fs && !clean && isDesktop && (
               <div className="absolute z-20 flex flex-col items-center desktop-social">
                 <div className="desktop-browse-inline">
                   <button onClick={() => go(-1)} disabled={index === 0} aria-label="上一个" title="上一个 ↑">
@@ -718,7 +742,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               )}
 
               {/* 桌面：左下信息 */}
-              {!fs && isDesktop && (
+              {!fs && !clean && isDesktop && (
               <div className="desktop-video-meta">
                 <div className="flex items-center gap-2">
                   <span className="text-[15px] font-bold text-white tsh truncate">@{meta.author}</span>
@@ -746,7 +770,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               )}
 
               {/* 移动端：标题 + 详情标签 + 进度线（不加底色，只铺一层柔和压暗保证可读） */}
-              {!fs && !isDesktop && (
+              {!fs && !clean && !isDesktop && (
                 <div className="absolute inset-x-0 z-20" style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset}px)` }}>
                   <div className="absolute inset-x-0 bottom-0 h-[190px] pointer-events-none"
                     style={{ background: "linear-gradient(0deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.42) 45%, transparent 100%)" }} />
@@ -1000,13 +1024,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       </div>
       {!isDesktop && !controlsLocked && active && (
         <div className={`absolute z-40 flex items-center gap-2 ${fs ? "right-14" : "right-3"}`} style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
-          {!fs && <button onClick={() => setMuted(m => !m)} aria-label={muted ? "取消静音" : "静音"}
+          {!fs && !clean && <button onClick={() => setMuted(m => !m)} aria-label={muted ? "取消静音" : "静音"}
             className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1">
             {muted ? <IVolMute size={17} /> : <IVol size={17} />}
           </button>}
           <button onClick={lockControls} aria-label="锁定播放控制" title="锁定播放控制" aria-pressed={false}
             className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1"><ILockF size={17} /></button>
-          {!fs && <button onClick={() => store.setTab("search")} aria-label="搜索"
+          {!fs && !clean && <button onClick={() => store.setTab("search")} aria-label="搜索"
             className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1"><ISearch size={18} /></button>}
         </div>
       )}
