@@ -924,10 +924,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   style={{
                     left: landscapeVideo ? "50%" : undefined,
                     right: landscapeVideo ? undefined : 8,
-                    top: landscapeVideo ? "64%" : "50%",
+                    top: landscapeVideo ? "64%" : "auto",
+                    bottom: landscapeVideo ? undefined : `calc(var(--sab, 0px) + ${bottomInset + 348}px)`,
                     transform: landscapeVideo
                       ? `translate(-50%, ${isActive && capsuleOn ? 0 : 10}px)`
-                      : `translateY(calc(-50% + ${isActive && capsuleOn ? 0 : 10}px))`,
+                      : `translateY(${isActive && capsuleOn ? 0 : 10}px)`,
                     opacity: isActive && capsuleOn ? 1 : 0,
                     pointerEvents: isActive && capsuleOn ? "auto" : "none",
                     transition: "opacity .38s cubic-bezier(.4,0,.2,1), transform .38s cubic-bezier(.4,0,.2,1)",
