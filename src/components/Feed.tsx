@@ -198,37 +198,20 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0 && !vpLandscape;
 
   /* ── 上下划切集 ──────────────────────────────────────────
-   * 默认行为是「上下划 = 换下一部剧」。打开这个开关后，如果当前这部剧还有
-   * 下一集 / 上一集，滑到相邻那一屏就改成切集，并把滚动位置退回原来那一屏。
-   *
-   * 滚动期间故意不更新 index（视频不换），停稳 150ms 后再决定切集还是切剧 ——
-   * 否则每次滑动都会先把隔壁那部剧加载一遍，白闪一下。
+   * 「上下划切集」开启时，播放区 overlay 的 touch-action 是 none，
+   * 原生滚动不参与：上/下划手势在抬手时一次性判定——
+   * 有上一/下一集就切集；没有就切上一/下一部剧。
+   * 关闭时保持原生滚动，停稳 150ms 后按所在屏切剧。
    */
   const idxRef = useRef(startIndex);
   const swipeTimer = useRef(0);
-  const swipeOn = useRef(swipeEp);
-  swipeOn.current = swipeEp;
 
   const resolveSwipe = useCallback((target: number) => {
-    const el = boxRef.current;
     const prev = idxRef.current;
-    if (!el || target === prev) return;
-    const id = videoIds[prev];
-    if (swipeOn.current && kind === "video" && id != null) {
-      const ep = epMap[id] || 1;
-      const total = (details[id]?.episodes || []).length;
-      const dir = target - prev;
-      const next = dir === 1 && total > ep ? ep + 1 : dir === -1 && ep > 1 ? ep - 1 : 0;
-      if (next) {
-        setEpMap((m) => ({ ...m, [id]: next }));
-        el.scrollTop = prev * (el.clientHeight || 1);
-        toast(`第 ${next} 集${total ? ` / ${total}` : ""}`, "info");
-        return;
-      }
-    }
+    if (target === prev) return;
     idxRef.current = target;
     setIndex(target);
-  }, [videoIds, epMap, details, kind, toast]);
+  }, []);
 
   /* 滚动定位 */
   const onScroll = useCallback(() => {
@@ -402,6 +385,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       };
       if (gesture.current?.timer) window.clearTimeout(gesture.current.timer);
       gesture.current = null;
+      if (holdRef.current) { holdRef.current = false; setHoldSpeed(false); }
+      lockArmedRef.current = false;
+      setLockArmed(false);
       setZoom((z) => ({ ...z, g: true }));
       return;
     }
@@ -513,23 +499,23 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       if (g.playing && active) videoRef.current?.play();
       return;
     }
-    /* 列表已经在顶 / 底，原生滚动没有相邻屏可滑，直接在原地切一集，
-       否则第一部的「上一集」永远滑不到。 */
+    /* 上下划手势（swipeEp 开启时 overlay 是 touch-action:none，
+       原生滚动不参与，这里抬手一次性判定；关着时走原生滚动切剧） */
     if (!cancelled && e && g.mode === "pan") {
       const dy = e.clientY - g.startY;
       const dx2 = e.clientX - g.x;
       if (Math.abs(dy) > 56 && Math.abs(dy) > Math.abs(dx2)) {
         const dir = dy < 0 ? 1 : -1;
-        const el = boxRef.current;
         const ep = epMap[curId] || 1;
         const total = episodes.length;
         const want = dir === 1 ? (total === 0 || ep < total ? ep + 1 : 0) : (ep > 1 ? ep - 1 : 0);
-        const atEdge = !el || (dir === 1 ? el.scrollTop + el.clientHeight >= el.scrollHeight - 2 : el.scrollTop <= 2);
-        if (swipeEp && kind === "video" && want && atEdge) {
+        if (swipeEp && kind === "video" && want) {
           setEpMap((m) => ({ ...m, [curId]: want }));
           toast(`第 ${want}集${total ? ` / ${total}` : ""}`, "info");
+          try { navigator.vibrate?.(12); } catch { /* ignore */ }
           return;
         }
+        if (swipeEp) { go(dir); return; }
       }
     }
     if (!cancelled && g.mode === "idle" && Date.now() - g.t < 260) {
@@ -723,7 +709,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           return (
             <section key={vid} className="relative w-full h-full snap-start snap-always overflow-hidden">
               {isActive && playUrl ? (
-                <div className="absolute inset-0" style={{ touchAction: "pan-y" }}
+                <div className="absolute inset-0" style={{ touchAction: swipeEp ? "none" : "pan-y" }}
                   onPointerDown={onDown} onPointerMove={onMove} onPointerUp={(e) => onUp(false, e)} onPointerCancel={(e) => onUp(true, e)} onLostPointerCapture={(e) => onUp(true, e)}>
                 <div style={{ position: "absolute", inset: 0, transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.s})`, transformOrigin: "center center", transition: zoom.g ? "none" : "transform .18s ease-out" }}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay active={active} muted={muted}
