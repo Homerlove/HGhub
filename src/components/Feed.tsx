@@ -113,12 +113,17 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const [vpLandscape, setVpLandscape] = useState(false);
   /* 进出全屏过渡期多次续播，防止 iOS 把播放打断 */
   const keepAliveTimers = useRef<number[]>([]);
+  /* 双指缩放：scale 1~4，平移跟手指 */
+  const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0, g: false });
+  const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchRef = useRef<{ d0: number; mx0: number; my0: number; s0: number; x0: number; y0: number } | null>(null);
 
   const curId = videoIds[index];
   const detail = details[curId];
   const curEp = epMap[curId] || 1;
   const playKey = `${curId}:${curEp}`;
   const playUrl = playUrls[playKey] || "";
+  useEffect(() => { setZoom({ s: 1, x: 0, y: 0, g: false }); pinchRef.current = null; pointersRef.current.clear(); }, [playUrl]);
   useEffect(() => { videoRef.current?.trace("page.active", { active, view: mode, video_id: curId, episode: curEp }); }, [active, mode, curId, curEp]);
   const episodes = detail?.episodes || [];
   const post = posts[curId];
@@ -382,7 +387,25 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
   /* —— 长按 2x（上滑锁定） / 横拖定位 / 单击暂停 —— */
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
-    if (isDesktop || controlsLocked || !active || gesture.current || e.button !== 0) return;
+    if (isDesktop || controlsLocked || !active) return;
+    pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointersRef.current.size === 2) {
+      const pts = [...pointersRef.current.values()];
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      pinchRef.current = {
+        d0: d,
+        mx0: (pts[0].x + pts[1].x) / 2,
+        my0: (pts[0].y + pts[1].y) / 2,
+        s0: zoom.s,
+        x0: zoom.x,
+        y0: zoom.y,
+      };
+      if (gesture.current?.timer) window.clearTimeout(gesture.current.timer);
+      gesture.current = null;
+      setZoom((z) => ({ ...z, g: true }));
+      return;
+    }
+    if (gesture.current || e.button !== 0) return;
     const el = e.currentTarget;
     const width = el.clientWidth || 1;
     try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
@@ -405,6 +428,19 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   };
 
   const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (pointersRef.current.has(e.pointerId)) {
+      pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    const p = pinchRef.current;
+    if (p && pointersRef.current.size >= 2) {
+      const pts = [...pointersRef.current.values()];
+      const d = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y) || 1;
+      const mx = (pts[0].x + pts[1].x) / 2;
+      const my = (pts[0].y + pts[1].y) / 2;
+      const s = Math.min(4, Math.max(1, p.s0 * (d / p.d0)));
+      setZoom({ s, x: p.x0 + (mx - p.mx0), y: p.y0 + (my - p.my0), g: true });
+      return;
+    }
     const g = gesture.current;
     if (!g || isDesktop) return;
     const dx = e.clientX - g.x;
@@ -441,7 +477,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     }
   };
 
-  const onUp = (cancelled = false) => {
+  const onUp = (cancelled = false, e?: React.PointerEvent<HTMLDivElement>) => {
+    if (e) pointersRef.current.delete(e.pointerId);
+    if (pointersRef.current.size < 2 && pinchRef.current) {
+      pinchRef.current = null;
+      // 松手后小于 1.05x 就归位，避免残留"歪着"的画面
+      setZoom((z) => (z.s < 1.05 ? { s: 1, x: 0, y: 0, g: false } : { s: z.s, x: z.x, y: z.y, g: false }));
+    }
     const g = gesture.current;
     gesture.current = null;
     if (!g) return;
@@ -656,7 +698,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
             <section key={vid} className="relative w-full h-full snap-start snap-always overflow-hidden">
               {isActive && playUrl ? (
                 <div className="absolute inset-0" style={{ touchAction: "pan-y" }}
-                  onPointerDown={onDown} onPointerMove={onMove} onPointerUp={() => onUp()} onPointerCancel={() => onUp(true)} onLostPointerCapture={() => onUp(true)}>
+                  onPointerDown={onDown} onPointerMove={onMove} onPointerUp={(e) => onUp(false, e)} onPointerCancel={(e) => onUp(true, e)} onLostPointerCapture={(e) => onUp(true, e)}>
+                <div style={{ position: "absolute", inset: 0, transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.s})`, transformOrigin: "center center", transition: zoom.g ? "none" : "transform .18s ease-out" }}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay active={active} muted={muted}
                   diagnosticContext={{ active, view: mode, kind, video_id: curId, episode: curEp }}
                   volume={volume} rate={effRate}
@@ -670,6 +713,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onWaiting={() => setWaiting(true)}
                   onEnded={() => { const next = episodes.find((e) => e.ep_num === curEp + 1); if (next) pickEp(next.ep_num); }}
                   onError={(m) => setErr(m)} />
+                </div>
                 </div>
               ) : (
                 <div className="absolute inset-0">
