@@ -30,10 +30,28 @@ script = (
 )
 
 src = open(path, encoding="utf-8").read()
-pat = re.compile(r'shellScript = "[^"]*xcode-script[^"]*";')
-new, count = pat.subn('shellScript = "' + script + '";', src)
-if count != 1:
-    sys.exit("project.pbxproj 里找到 %d 处 xcode-script，预期 1 处" % count)
+
+# pbxproj 里的字符串用 \" 转义引号，不能简单用 [^"]* 匹配
+pat = re.compile(r'shellScript = "((?:[^"\\]|\\.)*)";')
+hits = []
+
+
+def repl(m):
+    body = m.group(1)
+    if "xcode-script" not in body:
+        return m.group(0)
+    hits.append(body[:60])
+    return 'shellScript = "' + script + '";'
+
+
+new = pat.sub(repl, src)
+
+if len(hits) != 1:
+    for m in pat.finditer(src):
+        print("现有脚本:", m.group(1)[:100])
+    sys.exit("找到 %d 处 xcode-script，预期 1 处" % len(hits))
 
 open(path, "w", encoding="utf-8").write(new)
 print("已替换 Build Rust Code 脚本 ->", path)
+print("原脚本开头:", hits[0])
+print("新脚本:", script)
