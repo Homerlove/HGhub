@@ -57,12 +57,14 @@ type Persist = {
   muteOnStartup: boolean;
   volume: number;
   searchHist: string[];
+  /** 上下划切集：多集短剧上下滑就换集，而不是换下一部 */
+  swipeEp: boolean;
 };
 
 const LS = "hghub_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
-  muted: true, muteOnStartup: true, volume: 0.7, searchHist: [],
+  muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: false,
 };
 
 /** 旧版本 history 是 number[]，读出来时升级成带进度的结构 */
@@ -128,6 +130,7 @@ type Store = {
   fs: boolean; setFs: (v: boolean | ((p: boolean) => boolean)) => void;
   muted: boolean; setMuted: (v: boolean | ((p: boolean) => boolean)) => void;
   muteOnStartup: boolean; setMuteOnStartup: (on: boolean) => void;
+  swipeEp: boolean; setSwipeEp: (on: boolean) => void;
   volume: number; setVolume: (v: number) => void;
   searchHist: string[]; addSearch: (q: string) => void; clearSearchHist: () => void;
   strictSecurity: boolean; strictSecurityReady: boolean; securityPending: boolean; cliRelaxed: boolean; setStrictSecurity: (on: boolean) => Promise<void>;
@@ -293,6 +296,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const setMuteOnStartup = useCallback((on: boolean) => {
     setP((s) => ({ ...s, muteOnStartup: on }));
   }, []);
+  const setSwipeEp = useCallback((on: boolean) => {
+    setP((s) => ({ ...s, swipeEp: on }));
+  }, []);
   const setVolume = useCallback((v: number) => {
     const volume = Math.max(0, Math.min(1, v));
     setP((s) => ({ ...s, volume, muted: volume === 0 }));
@@ -309,12 +315,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     muted: p.muted, setMuted, volume: p.volume, setVolume, theater, setTheater, fs, setFs,
     muteOnStartup: p.muteOnStartup, setMuteOnStartup,
+    swipeEp: p.swipeEp, setSwipeEp,
     searchHist: p.searchHist, addSearch, clearSearchHist,
     strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch,
   }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
-    setMuted, setMuteOnStartup, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
+    setMuted, setMuteOnStartup, setSwipeEp, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch, theater, setTheater, fs, setFs]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

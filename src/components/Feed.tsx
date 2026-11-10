@@ -34,7 +34,7 @@ const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, "
 
 export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, startEp, startTime }: Props) {
   const store = useStore();
-  const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen } = store;
+  const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, swipeEp } = store;
   const isDesktop = !isMobile;
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -182,15 +182,49 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 沉浸全屏 + 横屏视频 → 舞台旋转 90°，看起来就是横屏 */
   const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0;
 
+  /* ── 上下划切集 ──────────────────────────────────────────
+   * 默认行为是「上下划 = 换下一部剧」。打开这个开关后，如果当前这部剧还有
+   * 下一集 / 上一集，滑到相邻那一屏就改成切集，并把滚动位置退回原来那一屏。
+   *
+   * 滚动期间故意不更新 index（视频不换），停稳 150ms 后再决定切集还是切剧 ——
+   * 否则每次滑动都会先把隔壁那部剧加载一遍，白闪一下。
+   */
+  const idxRef = useRef(startIndex);
+  const swipeTimer = useRef(0);
+  const swipeOn = useRef(swipeEp);
+  swipeOn.current = swipeEp;
+
+  const resolveSwipe = useCallback((target: number) => {
+    const el = boxRef.current;
+    const prev = idxRef.current;
+    if (!el || target === prev) return;
+    const id = videoIds[prev];
+    if (swipeOn.current && kind === "video" && id != null) {
+      const ep = epMap[id] || 1;
+      const total = (details[id]?.episodes || []).length;
+      const dir = target - prev;
+      const next = dir === 1 && total > ep ? ep + 1 : dir === -1 && ep > 1 ? ep - 1 : 0;
+      if (next) {
+        setEpMap((m) => ({ ...m, [id]: next }));
+        el.scrollTop = prev * (el.clientHeight || 1);
+        toast(`第 ${next} 集${total ? ` / ${total}` : ""}`, "info");
+        return;
+      }
+    }
+    idxRef.current = target;
+    setIndex(target);
+  }, [videoIds, epMap, details, kind, toast]);
+
   /* 滚动定位 */
   const onScroll = useCallback(() => {
     const el = boxRef.current;
     if (!el) return;
     const h = el.clientHeight || 1;
     const i = Math.max(0, Math.min(videoIds.length - 1, Math.round(el.scrollTop / h)));
-    setIndex((prev) => (prev === i ? prev : i));
     if (onNearEnd && i >= videoIds.length - 3) onNearEnd();
-  }, [videoIds.length, onNearEnd]);
+    window.clearTimeout(swipeTimer.current);
+    swipeTimer.current = window.setTimeout(() => resolveSwipe(i), 150);
+  }, [videoIds.length, onNearEnd, resolveSwipe]);
 
   const go = useCallback((delta: number) => {
     const el = boxRef.current;
