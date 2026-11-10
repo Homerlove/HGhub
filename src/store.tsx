@@ -215,6 +215,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener("hg:line", onLine);
     return () => window.removeEventListener("hg:line", onLine);
   }, []);
+  /** 自动选线：主站和发布页上的镜像全都不通。
+   *
+   * 只说一次（60s 节流）——巡检本身 10s 一轮，不节流会一直弹。
+   * 以前这种情况会悄悄切到 `.ai`（接口全 404），用户只看到「加载失败」，
+   * 根本不知道是网络的事。
+   */
+  useEffect(() => {
+    let last = 0;
+    const onDown = () => {
+      const now = Date.now();
+      if (now - last < 60_000) return;
+      last = now;
+      const id = ++toastSeq.current;
+      setToasts((t) => [...t.slice(-2), { id, msg: "线路全部不可用，请检查网络或代理", icon: "info" }]);
+      window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
+    };
+    window.addEventListener("hg:line-down", onDown);
+    return () => window.removeEventListener("hg:line-down", onDown);
+  }, []);
   /** 线路真的换了（自动、手切都算）：
    *
    * 旧数据全是在上一个域名上拉的，留着等于对着一条死链路。但各列表页只在

@@ -23,6 +23,8 @@ const HEALTH_STEPS = [60_000, 120_000, 300_000];
 const RECHECK_MS = 4_000;
 /** 断网时的重试间隔：网络回来时自己接上，不依赖 online 事件 */
 const OFFLINE_RETRY_MS = 30_000;
+/** 全部线路都不通时的复探间隔：等用户挂代理 / 换网，尽快恢复 */
+const DOWN_RETRY_MS = 10_000;
 
 export const autoLineEnabled = (): boolean => {
   try { return localStorage.getItem(KEY) !== "off"; } catch { return true; }
@@ -71,21 +73,32 @@ function schedule(delay: number) {
   }, delay);
 }
 
-/** 比一次线路（.com → .ai 落地页上的镜像 → .ai），选完定下来。 */
+/** 比一次线路（主站 → 推荐页上挂的镜像），选完定下来。 */
 export async function pickLine(reason: string, force = false): Promise<void> {
   if (!autoLineEnabled() || picking) return;
   if (!force && Date.now() - lastPickAt < PICK_COOLDOWN_MS) return;
   picking = true;
+  let down = false;
   try {
     const r = await api.lineAuto();
     lastPickAt = Date.now();
     downStreak = 0;
     failStreak = 0;
     step = 0;
-    lastPick = { base: r.base, tier: r.pick.tier, ms: r.pick.ms };
     const detail = r.pick.candidates
       .map((c) => `${c.tier}:${c.ok ? "ok" : c.reachable ? "reachable" : "down"}/${c.ms}ms`)
       .join(",");
+    // 全都不通（主站 + 推荐页上的镜像）：不切线路，只提示一声。
+    // 以前会盲切到 `.ai`，而 `.ai` 只是落地页、`/api` 全 404，
+    // 切过去是「首页能开、内容全空」，比明确报错更难排查。
+    if (r.pick.reason === "all-down") {
+      down = true;
+      logLine(`[line] auto(${reason}) all-down，保持 ${hostOf(r.base)} | ${detail}`);
+      tracePlayback("line.allDown", { reason, line: hostOf(r.base), candidates: detail });
+      window.dispatchEvent(new Event("hg:line-down"));
+      return;
+    }
+    lastPick = { base: r.base, tier: r.pick.tier, ms: r.pick.ms };
     logLine(
       `[line] auto(${reason}) ${hostOf(r.base)} tier=${r.pick.tier} ms=${r.pick.ms} ` +
         `switched=${r.switched} prev=${hostOf(r.previous)} | ${detail}`,
@@ -110,7 +123,8 @@ export async function pickLine(reason: string, force = false): Promise<void> {
     tracePlayback("line.fail", { where: "auto", reason, err: (e as Error).message });
   } finally {
     picking = false;
-    if (started) schedule(HEALTH_STEPS[0]);
+    // 全都不通时缩短复探间隔：用户挂上代理 / 换个网络要能尽快恢复，别等一分钟
+    if (started) schedule(down ? DOWN_RETRY_MS : HEALTH_STEPS[0]);
   }
 }
 
