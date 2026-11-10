@@ -59,6 +59,18 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
 ] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry"] }
 
+[target.'cfg(target_os = "ios")'.dependencies]
+objc2 = "0.6"
+objc2-ui-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "objc2-core-foundation",
+  "UIResponder",
+  "UIView",
+  "UIScrollView",
+  "UIWindow",
+  "UIGeometry",
+] }
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

@@ -203,6 +203,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 沉浸全屏 + 横屏视频 → 舞台旋转 90°，看起来就是横屏 */
   const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0 && !vpLandscape;
   const landscapeVideo = vsize.w > 0 && vsize.h > 0 && vsize.w > vsize.h;
+  const isLandscapeCurrent = useCallback(() => {
+    if (vsize.w > 0 && vsize.h > 0) return vsize.w > vsize.h;
+    const v = videoRef.current?.el();
+    if (v && v.videoWidth > 0 && v.videoHeight > 0) {
+      return v.videoWidth > v.videoHeight;
+    }
+    return false;
+  }, [vsize.w, vsize.h]);
 
   /* ── 上下划切集 ──────────────────────────────────────────
    * 「上下划切集」开启时，播放区 overlay 的 touch-action 是 none，
@@ -647,6 +655,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     }
   }, [isDesktop, keepAlive, setClean, setFs]);
 
+  /* 若用户在视频首帧宽高解析出来前已点进全屏，解析出横屏后自动补发横屏方向请求 */
+  useEffect(() => {
+    if (isDesktop || !fs || !landscapeVideo) return;
+    try { void invoke("set_orientation", { landscape: true }); } catch { /* ignore */ }
+    try {
+      (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.("landscape")?.catch(() => {});
+    } catch { /* ignore */ }
+  }, [isDesktop, fs, landscapeVideo]);
+
   /* 系统真旋转了（iOS 原生请求成功后），CSS 就不再转 90°；
      物理横置手机时自动进入全屏，竖回时自动退出全屏（对齐 LNPANDY 版）。 */
   useEffect(() => {
@@ -806,7 +823,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
   return (
     <div
-      className={`hg-player-ui absolute inset-0 overflow-hidden bg-black player-root ${controlsLocked ? "is-locked" : ""} ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${rotated ? "fs-landscape" : ""} ${isDesktop && idle ? "is-idle" : ""}`}
+      className={`hg-player-ui ${rotated ? "fs-landscape" : (!isDesktop && fs ? "fs-immersive" : "absolute inset-0")} overflow-hidden bg-black player-root ${controlsLocked ? "is-locked" : ""} ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${isDesktop && idle ? "is-idle" : ""}`}
       onPointerMove={() => { if (isDesktop) wake(); }}>
       <div className="absolute inset-0" inert={controlsLocked}>
       {/* 氛围背景 */}
@@ -820,9 +837,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         {videoIds.map((vid, i) => {
           const isActive = i === index;
           return (
-            <section key={vid} className="relative w-full h-full snap-start snap-always overflow-hidden">
+            <section key={vid} className={`${fs && !isActive ? "hidden" : "relative w-full h-full"} snap-start snap-always overflow-hidden`}>
               {isActive && playUrl ? (
-                <div className={rotated ? "fs-landscape" : (!isDesktop && fs ? "fs-immersive" : "absolute inset-0")} style={{ touchAction: swipeEp ? "none" : "pan-y" }}
+                <div className="absolute inset-0" style={{ touchAction: swipeEp ? "none" : "pan-y" }}
                   onPointerDown={onDown} onPointerMove={onMove} onPointerUp={(e) => onUp(false, e)} onPointerCancel={(e) => onUp(true, e)} onLostPointerCapture={(e) => onUp(true, e)}>
                 <div style={{ position: "absolute", inset: 0, transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.s})`, transformOrigin: "center center", transition: zoom.g ? "none" : "transform .18s ease-out" }}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay active={active} muted={muted}
@@ -832,7 +849,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onClick={() => { if (isDesktop) videoRef.current?.toggle(); }}
                   onTime={onTimeTick}
                   onDuration={onDurationTick}
-                  onSize={(w, h) => setVsize({ w, h })}
+                  onSize={(w, h) => setVsize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }))}
                   onPlaying={() => { setPaused(false); setWaiting(false); }}
                   onPause={() => setPaused(true)}
                   onWaiting={() => setWaiting(true)}
@@ -881,42 +898,42 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
               {/* 竖屏下的快捷操作：统一玻璃胶囊组，图标 + 短标签，细分隔线对齐 */}
               {isActive && !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05 || episodes.length > 1) && (
-                <div className="absolute left-1/2 -translate-x-1/2 z-20" style={{ top: "64%" }}>
-                  <div className="flex items-center gap-0.5 h-8 px-1 rounded-full backdrop-blur-xl elev-2"
+                <div className="absolute left-1/2 -translate-x-1/2 z-20 w-max max-w-[calc(100%-24px)] whitespace-nowrap" style={{ top: "64%" }}>
+                  <div className="inline-flex items-center gap-0.5 h-8 px-1 rounded-full backdrop-blur-xl elev-2 whitespace-nowrap"
                     style={{ background: "rgba(12,15,22,.58)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.09)" }}>
                     {episodes.length > 1 && (
                       <button type="button" aria-pressed={swipeEp}
                         onClick={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
-                        className="flex items-center gap-1.5 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                        className="shrink-0 whitespace-nowrap flex items-center gap-1.5 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                         style={swipeEp ? { background: "rgba(255,255,255,.14)", color: "#fff" } : { color: "rgba(255,255,255,.72)" }}>
                         <IVertSwap size={13} />
                         <span>切集</span>
-                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: swipeEp ? "#5ee7a0" : "rgba(255,255,255,.28)" }} />
+                        <span className="shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: swipeEp ? "#5ee7a0" : "rgba(255,255,255,.28)" }} />
                       </button>
                     )}
                     {landscapeVideo && (
                       <>
-                        <span className="w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />
+                        {episodes.length > 1 && <span className="shrink-0 w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />}
                         <button type="button" onClick={() => {
                           if (zoom.s > 1.05) { setZoom({ s: 1, x: 0, y: 0, g: false }); setPortraitFit("contain"); }
                           else setPortraitFit((f) => (f === "contain" ? "cover" : "contain"));
-                        }} className="flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                        }} className="shrink-0 whitespace-nowrap flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                           style={{ color: "rgba(255,255,255,.9)" }}>
                           {zoom.s > 1.05 ? `还原 ${zoom.s.toFixed(1)}x` : portraitFit === "contain" ? "铺满" : "适应"}
                         </button>
-                        <span className="w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />
+                        <span className="shrink-0 w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />
                         <button type="button" onClick={() => enterFs(true)}
-                          className="flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                          className="shrink-0 whitespace-nowrap flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                           style={{ color: "rgba(255,255,255,.9)" }}>
-                          <IExpand size={13} />横屏
+                          <IExpand size={13} /><span>横屏</span>
                         </button>
                       </>
                     )}
                     {!landscapeVideo && zoom.s > 1.05 && (
                       <>
-                        <span className="w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />
+                        {episodes.length > 1 && <span className="shrink-0 w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />}
                         <button type="button" onClick={() => setZoom({ s: 1, x: 0, y: 0, g: false })}
-                          className="flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                          className="shrink-0 whitespace-nowrap flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                           style={{ color: "rgba(255,255,255,.9)" }}>
                           还原 {zoom.s.toFixed(1)}x
                         </button>
@@ -938,7 +955,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     <ICommentF size={26} className="hg-ink hg-ov-shadow" />
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">评论</span>
                   </button>
-                  <button onClick={() => enterFs(vsize.w > vsize.h && vsize.h > 0)} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
+                  <button onClick={() => enterFs(isLandscapeCurrent())} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
                     <IExpand size={26} className="hg-ink hg-ov-shadow" />
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">全屏</span>
                   </button>
@@ -1142,7 +1159,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
       {/* 移动端全屏模式下的进度条（普通模式的进度条在底部灰块里） */}
       {!isDesktop && fs && (
-        <div className="absolute inset-x-0 z-30 px-4" style={{ bottom: "calc(var(--sab, 0px) + 52px)", height: 22 }}>
+        <div
+          className="absolute inset-x-0 z-30 px-4"
+          style={{
+            bottom: rotated ? 52 : "calc(var(--sab, 0px) + 52px)",
+            paddingLeft: rotated ? "calc(var(--sat, 0px) + 16px)" : undefined,
+            paddingRight: rotated ? "calc(var(--sab, 0px) + 16px)" : undefined,
+            height: 22,
+          }}>
           <div ref={barRef} className="relative h-full" style={{ touchAction: "none" }}
             onPointerDown={onBarDown} onPointerMove={onBarMove} onPointerUp={onBarUp} onPointerCancel={onBarUp}>
             <div className="absolute inset-x-0 bottom-[8px] h-[2.5px] rounded-full" style={{ background: "rgba(255,255,255,.3)" }}>
@@ -1156,12 +1180,19 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       {!isDesktop && fs && (
         <>
           <button onClick={exitFs} aria-label="退出全屏"
-            className="hg-chip-strong absolute right-3 z-40 w-9 h-9 rounded-full backdrop-blur-md flex items-center justify-center pressable elev-1"
-            style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
+            className="hg-chip-strong absolute z-40 w-9 h-9 rounded-full backdrop-blur-md flex items-center justify-center pressable elev-1"
+            style={{
+              top: rotated ? 12 : "calc(var(--sat, 0px) + 6px)",
+              right: rotated ? "calc(var(--sab, 0px) + 12px)" : 12,
+            }}>
             <ICompress size={18} />
           </button>
           <div className="absolute inset-x-0 z-40 flex items-center gap-3 px-4"
-            style={{ bottom: "calc(var(--sab, 0px) + 10px)" }}>
+            style={{
+              bottom: rotated ? 10 : "calc(var(--sab, 0px) + 10px)",
+              paddingLeft: rotated ? "calc(var(--sat, 0px) + 16px)" : undefined,
+              paddingRight: rotated ? "calc(var(--sab, 0px) + 16px)" : undefined,
+            }}>
             <button onClick={() => videoRef.current?.toggle()}
               className="hg-chip shrink-0 w-9 h-9 rounded-full flex items-center justify-center pressable">
               {paused ? <IPlayF size={18} /> : <IPauseF size={17} />}
@@ -1296,7 +1327,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       )}
       </div>
       {!isDesktop && !controlsLocked && active && (
-        <div className={`absolute z-40 flex items-center gap-2 ${fs ? "right-14" : "right-3"}`} style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
+        <div className={`absolute z-40 flex items-center gap-2 ${fs ? "" : "right-3"}`}
+          style={{
+            top: rotated ? 12 : "calc(var(--sat, 0px) + 6px)",
+            right: fs ? (rotated ? "calc(var(--sab, 0px) + 56px)" : 56) : undefined,
+          }}>
           {!fs && !clean && <button onClick={() => setMuted(m => !m)} aria-label={muted ? "取消静音" : "静音"}
             className="hg-chip w-9 h-9 rounded-full flex items-center justify-center pressable elev-1">
             {muted ? <IVolMute size={17} /> : <IVol size={17} />}

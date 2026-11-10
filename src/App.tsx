@@ -36,8 +36,8 @@ function TabBar() {
   const idx = items.findIndex((i) => i.k === tab);
   const overVideo = tab === "home";
   const light = !overVideo && theme === "light";
-  /* 液滴定位：4 等分槽位，百分比偏移，宽度 = 1/4 减去内边距 */
-  const dropLeft = `calc(4px + (100% - 8px - 56px) * ${idx / 4})`;
+  /* 液滴中心对齐每个等分槽位的中心，定位不受固定胶囊宽度影响。 */
+  const dropLeft = `${12.5 + idx * 25}%`;
   return (
     <nav className="hg-tabbar absolute inset-x-0 bottom-0 z-30 flex justify-center"
       style={{ paddingBottom: "calc(var(--sab, 0px) * 0.55)" }} aria-label="主导航">
@@ -55,6 +55,7 @@ function TabBar() {
         {/* 液滴：跟随选中项的玻璃胶囊 */}
         <div className="hg-drop absolute top-[4px] bottom-[4px] w-[56px]" style={{
           left: dropLeft,
+          transform: "translateX(-50%)",
           borderRadius: 24,
           transition: "left 480ms cubic-bezier(.32,1.35,.45,1)",
           background: light ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.14)",
