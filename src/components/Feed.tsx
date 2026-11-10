@@ -1055,8 +1055,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                       第 {curEp}/{episodes.length} 集
                     </span>
                   )}
-                  {!!meta.score && (
-                    <span className="shrink-0 text-[11px] font-bold hg-gold hg-ov-shadow">{meta.score.toFixed(1)} 分</span>
+                   {hevcUrl && (
+                     <button type="button" aria-pressed={preferHevc}
+                       onClick={() => { setPreferHevc(!preferHevc); toast(preferHevc ? "已切回标准画质" : "已切换高清 HEVC", "ok"); }}
+                       className={`shrink-0 h-[18px] px-1.5 rounded-md text-[10px] font-bold flex items-center pressable transition-colors ${preferHevc ? "bg-primary text-on-primary" : "text-white border border-white/30"}`}>
+                       {preferHevc ? "HD" : "标清"}
+                     </button>
+                   )}
+                   {!!meta.score && (
+                  <span className="shrink-0 text-[11px] font-bold hg-gold hg-ov-shadow">{meta.score.toFixed(1)} 分</span>
                   )}
                 </div>
 
@@ -1077,7 +1084,16 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   进度条轨道几乎不可见，只用白点标播放位置。 */}
               {!fs && !clean && !isDesktop && (
                 <div className="absolute inset-x-0 z-20" style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset}px)` }}>
-                  <p className="relative px-4 pb-2 text-[14px] font-semibold leading-snug hg-ink-2 hg-ov-shadow-strong clamp-2">{meta.title}</p>
+                  <div className="relative px-4 pb-2 flex items-center gap-2">
+                    <p className="flex-1 min-w-0 text-[14px] font-semibold leading-snug hg-ink-2 hg-ov-shadow-strong clamp-2">{meta.title}</p>
+                    {hevcUrl && (
+                      <button type="button" aria-pressed={preferHevc}
+                        onClick={() => { setPreferHevc(!preferHevc); toast(preferHevc ? "已切回标准画质" : "已切换高清 HEVC", "ok"); }}
+                        className={`shrink-0 h-[20px] px-1.5 rounded-md text-[10px] font-bold flex items-center pressable transition-colors ${preferHevc ? "bg-primary text-on-primary" : "hg-chip hg-ink-3"}`}>
+                        {preferHevc ? "HD" : "标清"}
+                      </button>
+                    )}
+                  </div>
                   <div className="relative pt-1.5 pb-2.5">
                     <button onClick={() => setPanel("detail")}
                       className="px-4 flex items-center gap-0.5 text-[10.5px] font-medium hg-ink-3 hg-ov-shadow-strong pressable">
