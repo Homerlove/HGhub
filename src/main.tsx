@@ -40,18 +40,9 @@ window.addEventListener("unhandledrejection", (e) => {
   report("reject", String((e.reason && (e.reason.stack || e.reason.message)) || e.reason));
 });
 
-/* iOS: WKWebView 工具栏收起/键盘弹出后 layout viewport 高度可能不更新，
-   页面底部会留一截空白（旋转一下才恢复的根源）。
-   把 html 高度钉在可视高度上，并在旋转后重新校准。 */
-if (platform === "ios" && window.visualViewport) {
-  const apply = () => {
-    const h = window.visualViewport?.height;
-    if (h) document.documentElement.style.height = `${h}px`;
-  };
-  apply();
-  window.visualViewport.addEventListener("resize", apply);
-  window.addEventListener("orientationchange", () => setTimeout(apply, 150));
-}
+/* iOS 底部留白：改用 CSS 100dvh（见 index.css）动态跟踪可视高度。
+   不再用 JS 在启动时钉死 html 高度——启动瞬间 visualViewport.height 尚未
+   完成布局，抓到错误值会把 html 高度锁死，正是「底部留白、旋转一次才恢复」的根因。 */
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

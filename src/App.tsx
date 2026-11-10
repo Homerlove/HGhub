@@ -37,9 +37,11 @@ function TabBar() {
     <nav className="hg-tabbar absolute bottom-0 inset-x-0 z-30"
       style={{
         paddingBottom: "var(--sab, 0px)",
-        background: lightBar ? "rgba(250, 250, 250, .97)" : overVideo ? "#000000" : "#141414",
-        borderTop: lightBar ? "1px solid rgba(0,0,0,.08)" : overVideo ? "none" : "1px solid rgba(255,255,255,.07)",
-        boxShadow: lightBar ? "0 -2px 14px rgba(0,0,0,.05)" : "none",
+        background: lightBar ? "rgba(250, 250, 250, .66)" : "rgba(17, 17, 17, .58)",
+        borderTop: lightBar ? "1px solid rgba(255,255,255,.65)" : "1px solid rgba(255,255,255,.10)",
+        boxShadow: lightBar ? "0 -6px 24px rgba(0,0,0,.06)" : "0 -6px 24px rgba(0,0,0,.25)",
+        backdropFilter: "blur(28px) saturate(185%)",
+        WebkitBackdropFilter: "blur(28px) saturate(185%)",
       }}>
       <div className="h-[40px] flex items-center px-1">
         {items.map(({ k, label }) => {
