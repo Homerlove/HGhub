@@ -207,7 +207,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0 && !vpLandscape;
   const landscapeVideo = vsize.w > 0 && vsize.h > 0 && vsize.w > vsize.h;
   /* 竖屏快捷胶囊的显隐：不卸载、只改 opacity，这样淡入淡出都能过渡（#19） */
-  const capsuleOn = !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05 || episodes.length > 1);
+  const capsuleOn = !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05);
   const isLandscapeCurrent = useCallback(() => {
     if (vsize.w > 0 && vsize.h > 0) return vsize.w > vsize.h;
     const v = videoRef.current?.el();
@@ -929,7 +929,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     left: landscapeVideo ? "50%" : undefined,
                     right: landscapeVideo ? undefined : 8,
                     top: landscapeVideo ? "64%" : "auto",
-                    bottom: landscapeVideo ? undefined : `calc(var(--sab, 0px) + ${bottomInset + 348}px)`,
+                    bottom: landscapeVideo ? undefined : `calc(var(--sab, 0px) + ${bottomInset + 460}px)`,
                     transform: landscapeVideo
                       ? `translate(-50%, ${isActive && capsuleOn ? 0 : 10}px)`
                       : `translateY(${isActive && capsuleOn ? 0 : 10}px)`,
@@ -941,16 +941,6 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     ? "inline-flex items-center gap-0.5 h-8 px-1 rounded-full backdrop-blur-xl elev-2 whitespace-nowrap"
                     : "flex flex-col items-stretch gap-1 p-1 rounded-[18px] backdrop-blur-xl elev-2"}
                     style={{ background: "rgba(12,15,22,.58)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.09)" }}>
-                    {episodes.length > 1 && (
-                      <button type="button" aria-pressed={swipeEp} aria-label="上下划切集开关"
-                        onClick={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
-                        className="whitespace-nowrap flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
-                        style={swipeEp ? { background: "rgba(255,255,255,.14)", color: "#fff" } : { color: "rgba(255,255,255,.72)" }}>
-                        <IVertSwap size={13} />
-                        
-                        <span className="shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: swipeEp ? "#5ee7a0" : "rgba(255,255,255,.28)" }} />
-                      </button>
-                    )}
                     {landscapeVideo && (
                       <>
                         <button type="button" onClick={() => {
@@ -984,6 +974,20 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               {!fs && !clean && !isDesktop && (
                 <div className="absolute right-3 z-20 flex flex-col items-center gap-[16px]"
                   style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset + 92}px)` }}>
+                  {episodes.length > 1 && (
+                    <button type="button" onClick={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
+                      className="flex flex-col items-center gap-1 pressable" aria-pressed={swipeEp} aria-label="上下划切集开关">
+                      <IVertSwap size={26} className={swipeEp ? "hg-gold hg-ov-shadow" : "hg-ink hg-ov-shadow"} />
+                      <span className="text-[10.5px] hg-ov-shadow" style={{ color: swipeEp ? "#f3c969" : undefined }}>切集</span>
+                    </button>
+                  )}
+                  {hevcUrl && (
+                    <button type="button" onClick={() => { setPreferHevc(!preferHevc); toast(preferHevc ? "已切回标准画质" : "已切换高清 HEVC", "ok"); }}
+                      className="flex flex-col items-center gap-1 pressable" aria-pressed={preferHevc} aria-label="画质切换">
+                      <span className={`flex items-center justify-center h-[22px] min-w-[30px] px-1 rounded-md text-[10.5px] font-bold hg-ov-shadow ${preferHevc ? "bg-primary text-on-primary" : "hg-chip hg-ink-2"}`}>{preferHevc ? "HD" : "标清"}</span>
+                      <span className="text-[10.5px] hg-ov-shadow" style={{ color: preferHevc ? "#fff" : undefined }}>{preferHevc ? "高清" : "标清"}</span>
+                    </button>
+                  )}
                   <button onClick={onFav} className="flex flex-col items-center gap-1 pressable" aria-pressed={isFav(curId)} aria-label="收藏">
                     {isFav(curId) ? <IStarF size={27} className="hg-gold" /> : <IStar size={27} className="hg-ink hg-ov-shadow" />}
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">收藏</span>
@@ -1091,13 +1095,6 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 <div className="absolute inset-x-0 z-20" style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset}px)` }}>
                   <div className="relative px-4 pb-2 flex items-center gap-2">
                     <p className="flex-1 min-w-0 text-[14px] font-semibold leading-snug hg-ink-2 hg-ov-shadow-strong clamp-2">{meta.title}</p>
-                    {hevcUrl && (
-                      <button type="button" aria-pressed={preferHevc}
-                        onClick={() => { setPreferHevc(!preferHevc); toast(preferHevc ? "已切回标准画质" : "已切换高清 HEVC", "ok"); }}
-                        className={`shrink-0 h-[20px] px-1.5 rounded-md text-[10px] font-bold flex items-center pressable transition-colors ${preferHevc ? "bg-primary text-on-primary" : "hg-chip hg-ink-3"}`}>
-                        {preferHevc ? "HD" : "标清"}
-                      </button>
-                    )}
                   </div>
                   <div className="relative pt-1.5 pb-2.5">
                     <button onClick={() => setPanel("detail")}
