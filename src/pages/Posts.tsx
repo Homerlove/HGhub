@@ -119,7 +119,13 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
   const [post, setPost] = useState<(Post & { content?: string; video_url?: string }) | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [play, setPlay] = useState(false);
+  /* 吃瓜帖详情里的 video_url 恒为空，视频地址只在 playback 接口里；
+     不解析就整页只有图文（issue #11）。segs 是分段地址，多数帖只有 1 段。 */
+  const [segs, setSegs] = useState<string[]>([]);
+  const [seg, setSeg] = useState(0);
+  const [resolving, setResolving] = useState(false);
   const content = post?.content || "";
+  const src = segs[seg] || "";
   const safeHtml = useMemo(() => sanitizeHtml(content), [content, strictSecurity]);
   const openSafeLink = (url: string) => {
     api.openUrl(url).catch(() => {
@@ -129,9 +135,26 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
 
   useEffect(() => {
     let alive = true;
+    setPlay(false);
+    setSegs([]);
+    setSeg(0);
     api.post(id)
-      .then((p) => { if (alive) setPost(p); })
+      .then((p) => {
+        if (!alive) return;
+        setPost(p);
+        /* 老字段有值就直接用，省一次请求 */
+        if (p.video_url) { setSegs([p.video_url]); setPlay(true); }
+      })
       .catch((e) => { if (alive) setErr((e as Error).message || "加载失败"); });
+    setResolving(true);
+    api.postPlayback(id)
+      .then((r) => {
+        if (!alive) return;
+        const list = (r?.videos || []).map((v) => v?.url || "").filter(Boolean);
+        if (list.length) { setSegs(list); setPlay(true); }
+      })
+      .catch(() => { /* 无视频：保持图文 */ })
+      .finally(() => { if (alive) setResolving(false); });
     return () => { alive = false; };
   }, [id]);
 
@@ -150,18 +173,37 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
         ) : (
           <>
             <div className="relative w-full bg-black" style={{ height: "min(40vh, 360px)" }}>
-              {play && post.video_url ? (
-                <Player src={post.video_url} poster={cover(post.cover)} autoPlay active={active} controls muted={muted}
-                  onToggleMute={() => setMuted((m) => !m)} diagnosticContext={{ video_id: id, active }} className="w-full h-full" />
+              {play && src ? (
+                <Player src={src} poster={cover(post.cover)} autoPlay active={active} controls muted={muted}
+                  onToggleMute={() => setMuted((m) => !m)} diagnosticContext={{ video_id: id, active }} className="w-full h-full"
+                  onEnded={() => {
+                    /* 多段吃瓜视频：播完自动接下一段 */
+                    if (seg < segs.length - 1) setSeg(seg + 1); else setPlay(false);
+                  }} />
               ) : (
-                <button onClick={() => { if (post.video_url) setPlay(true); else toast("该帖子没有视频", "info"); }} className="absolute inset-0">
+                <button onClick={() => { if (src) setPlay(true); else if (!resolving) toast("该帖子没有视频", "info"); }} className="absolute inset-0">
                   <Img src={post.cover} eager />
-                  <span className="absolute inset-0 flex items-center justify-center">
-                    <span className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center elev-2">
-                      <IPlayF size={24} className="text-white ml-0.5" />
+                  {src && (
+                    <span className="absolute inset-0 flex items-center justify-center">
+                      <span className="w-14 h-14 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center elev-2">
+                        <IPlayF size={24} className="text-white ml-0.5" />
+                      </span>
                     </span>
-                  </span>
+                  )}
                 </button>
+              )}
+              {segs.length > 1 && (
+                <div className="absolute top-2 right-2 z-30 flex items-center gap-1 max-w-[70%] overflow-x-auto no-bar">
+                  {segs.map((_, i) => (
+                    <button key={i} onClick={() => { setSeg(i); setPlay(true); }}
+                      className="shrink-0 h-6 px-2 rounded-full text-[10.5px] font-semibold pressable"
+                      style={i === seg
+                        ? { background: "var(--p-primary)", color: "var(--p-on-primary)" }
+                        : { background: "rgba(0,0,0,.55)", color: "rgba(255,255,255,.85)" }}>
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
             <div className="px-4 pt-3.5">

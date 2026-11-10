@@ -61,7 +61,7 @@ const READ_ONLY = new Set([
   "api_me", "api_feed", "api_category", "api_rank", "api_search",
   "api_posts", "api_post", "api_post_comments", "api_video", "api_play", "api_comments",
   "api_topics", "api_topic", "api_tags", "api_tag_videos", "api_search_hot",
-  "api_post_categories", "api_post_category", "api_related", "api_following", "api_user", "api_user_stats", "api_user_videos",
+  "api_post_playback", "api_post_categories", "api_post_category", "api_related", "api_following", "api_user", "api_user_stats", "api_user_videos",
 ]);
 /** 给自动选线用的观察点。api.ts 不反向依赖 autoLine，避免循环 import。 */
 export type NetObserver = (r: { ok: boolean; cmd: string; msg?: string; networkish?: boolean }) => void;
@@ -148,6 +148,8 @@ export const api = {
   searchHot: () => call<{ items: HotWord[] }>("api_search_hot"),
   posts: (page = 1, size = 20) => call<Paged<Post>>("api_posts", { page, size }),
   post: (id: number) => call<Post & { content?: string; video_url?: string }>("api_post", { id }),
+  /** 吃瓜帖视频：详情里 video_url 恒为空，地址由 playback 接口下发（可能多段）。 */
+  postPlayback: (id: number) => call<{ mode?: number; videos?: { index: number; url: string }[] }>("api_post_playback", { id }),
 
   video: (id: number) => call<Detail>("api_video", { id }),
   play: (id: number, ep: number) => call<PlayInfo>("api_play", { id, ep }),

@@ -650,6 +650,18 @@ pub async fn api_post(state: State<'_, Api>, id: i64) -> Result<Value, String> {
     state.get(&format!("/api/posts/{id}")).await
 }
 
+/// 吃瓜帖视频：`POST /api/posts/{id}/playback` → `data.videos[].url`（mode=1 为明文 m3u8）。
+///
+/// 帖详情里的 `video_url` / `video_api` 恒为空，视频地址只由这个接口下发；
+/// 不调它的话吃瓜页永远只有图文（issue #11）。无视频时接口返回 status=0
+/// 「视频不存在或不可播放」，经 `edge()` 转换后就是 Err，前端按「无视频」处理。
+#[tauri::command]
+pub async fn api_post_playback(state: State<'_, Api>, id: i64) -> Result<Value, String> {
+    state
+        .post(&format!("/api/posts/{id}/playback"), Some(json!({})))
+        .await
+}
+
 /* ───────────────────────── 详情 / 播放 ───────────────────────── */
 
 #[tauri::command]
