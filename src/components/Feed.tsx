@@ -8,6 +8,7 @@ import PlayerControls from "./PlayerControls";
 import PlaybackLock from "./PlaybackLock";
 import { ArticlePanel, CommentsPanel, EpisodesPanel } from "./Panels";
 import { setBackHandler } from "../back";
+import { tracePlayback } from "../playbackDiagnostics";
 import {
   IBack, IBoltF, IChevR, IChevronDown, IChevronUp, IClose, ICommentF, ICompress, IExpand, IFileText, IHeart, IHeartF,
   ILink, IList, ILockF, IPauseF, IPlayF, ISearch, IStar, IStarF, IVol, IVolMute,
@@ -289,6 +290,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           `[play] id=${curId} ep=${curEp} src=${streamUrl ? "y" : "n"} kind=${kind} host=${host}` +
           (streamUrl ? "" : ` status=${String(raw.status ?? "?")} msg=${String(raw.msg ?? "")}`),
         );
+        // 「暂无播放地址」的现场：接口成功但没给地址时，status/msg 是唯一证据。
+        tracePlayback("play.resolve", {
+          video_id: curId, episode: curEp, resolved: !!streamUrl, kind, host,
+          status: raw.status ?? null, msg: String(raw.msg ?? "") || null,
+        });
         if (!streamUrl) throw new Error("暂无播放地址");
         setPlayUrls((m) => ({ ...m, [playKey]: streamUrl }));
         addHistory(curId, curEp);

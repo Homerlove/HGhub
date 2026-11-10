@@ -12,6 +12,7 @@
  * 探到不通也不马上切：4 秒后再确认一次，连续两次不通才换，避免一次抖动就跳线路。
  */
 import { api, hostOf, logLine, setNetObserver } from "./api";
+import { tracePlayback } from "./playbackDiagnostics";
 
 const KEY = "hg.autoLine";
 /** 两次「选线路」的最小间隔：换网事件与失败重试可能同时吵，别重复比 */
@@ -89,6 +90,10 @@ export async function pickLine(reason: string, force = false): Promise<void> {
       `[line] auto(${reason}) ${hostOf(r.base)} tier=${r.pick.tier} ms=${r.pick.ms} ` +
         `switched=${r.switched} prev=${hostOf(r.previous)} | ${detail}`,
     );
+    tracePlayback("line.pick", {
+      reason, line: hostOf(r.base), tier: r.pick.tier, ms: r.pick.ms,
+      switched: r.switched, prev: hostOf(r.previous), candidates: detail,
+    });
     // 只有真的换了线路才提示，启动时本来就在这条线上就别打扰用户
     if (r.switched) {
       const region: "cn" | "intl" = r.pick.tier === "main" ? "intl" : "cn";
@@ -102,6 +107,7 @@ export async function pickLine(reason: string, force = false): Promise<void> {
     }
   } catch (e) {
     logLine(`[line] auto(${reason}) failed: ${(e as Error).message}`);
+    tracePlayback("line.fail", { where: "auto", reason, err: (e as Error).message });
   } finally {
     picking = false;
     if (started) schedule(HEALTH_STEPS[0]);
@@ -167,6 +173,9 @@ async function check(reason: string): Promise<void> {
       `[line] health(${reason}) down=${downStreak} base=${hostOf(h.base)} ` +
         `ms=${h.ms} status=${h.status ?? "-"}`,
     );
+    tracePlayback("line.health", {
+      reason, line: hostOf(h.base), down: downStreak, ms: h.ms, status: h.status ?? null,
+    });
     if (downStreak < 2) {
       // 4 秒后再确认一次，别被一次抖动骗走
       schedule(RECHECK_MS);

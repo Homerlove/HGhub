@@ -246,50 +246,40 @@ pub fn playback_log_write(entries: Vec<Entry>) -> Result<(), String> {
 pub fn playback_log_read() -> Result<String, String> {
     let log = LOG.lock().map_err(|_| "日志锁失败")?;
     let dir = log.dir.as_ref().ok_or("日志目录尚未初始化")?;
-    let mut text = String::new();
-    // 环境块放最前面：用户「复制 → 粘贴」就能直接看，不用再自报版本、平台、线路。
-    // 线路只保留 host，不带路径与查询串（签名参数一个都不落盘）。
     let base = crate::net::base();
     let host = base.split("://").nth(1).unwrap_or(&base);
     let host = host.split('/').next().unwrap_or(host);
-    text.push_str(&format!(
-        "=== 环境（自动生成，无需另行补充）===\n\
-         version : {ver}\n\
-         target  : {os} / {arch}\n\
-         line    : {host}\n\
-         strict  : {strict}\n\
-         pid     : {pid}\n\
-         time    : {ts}\n\
-         说明    : 取播放地址与接口失败看下方 [play] / [api] 行；\n\
-         视频 id / 集数 / 状态码都在 [play] 行里；WebView 内核见 [env] 行\n\n",
-        ver = env!("CARGO_PKG_VERSION"),
-        os = std::env::consts::OS,
-        arch = std::env::consts::ARCH,
-        host = host,
-        strict = crate::network_policy::strict_security(),
-        pid = std::process::id(),
-        ts = crate::logging::utc_timestamp().unwrap_or_default(),
-    ));
+    let mut text = env_line(host)?;
     for name in ["playback.previous.log", "playback.log"] {
         let path = dir.join(name);
         if path.exists() {
             if fs::metadata(&path).map_err(|_| "无法读取日志")?.len() > MAX_FILE + 16384 {
                 return Err("日志文件超出大小限制".into());
             }
-            text.push_str(&fs::read_to_string(path).map_err(|_| "无法读取日志")?);
-        }
-    }
-    // 连带始终在写的 debug.log 尾部：用户反馈「暂无播放地址」时，真正有用的
-    // status/msg 只在 debug.log 里；没有它，这份导出就缺最关键的一段。
-    if let Ok(bytes) = fs::read(dir.join("debug.log")) {
-        let start = bytes.len().saturating_sub(64 * 1024);
-        let tail = String::from_utf8_lossy(&bytes[start..]);
-        if !tail.trim().is_empty() {
-            text.push_str("\n--- debug.log（尾部 64KB，始终记录）---\n");
-            text.push_str(&tail);
+            let body = fs::read_to_string(path).map_err(|_| "无法读取日志")?;
+            text.push_str(body.trim_end_matches('\n'));
+            text.push('\n');
         }
     }
     Ok(text)
+}
+
+/// 与落盘行完全同构的环境记录：版本 / 平台 / 线路 host / 严格模式。
+/// 线路只留 host，不带路径与查询串（签名参数一个都不落盘）。
+fn env_line(host: &str) -> Result<String, String> {
+    let entry = json!({
+        "ts": crate::logging::utc_timestamp()?,
+        "pid": std::process::id(),
+        "seq": SEQ.load(Ordering::Relaxed),
+        "event": "diagnostics.env",
+        "strict": crate::network_policy::strict_security(),
+        "data": {
+            "version": env!("CARGO_PKG_VERSION"),
+            "target": format!("{} / {}", std::env::consts::OS, std::env::consts::ARCH),
+            "line": host,
+        },
+    });
+    Ok(entry.to_string() + "\n")
 }
 
 #[cfg(test)]
@@ -326,6 +316,12 @@ mod tests {
         let text = playback_log_read().unwrap();
         assert!(text.contains("web.seek.request"));
         assert!(!text.contains("test.off"));
+        // 导出的就是 JSONL 本体：环境记录 + 每行事件，一行一个对象，不掺纯文本。
+        assert!(text.contains(""diagnostics.env""));
+        for line in text.lines() {
+            assert!(line.starts_with('{') && line.ends_with('}'), "不是 JSONL 行: {line}");
+            serde_json::from_str::<Value>(line).expect("导出行必须可解析");
+        }
         bind(&dir);
         assert!(!enabled());
         let mut log = LOG.lock().unwrap();

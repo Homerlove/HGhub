@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { tracePlayback } from "./playbackDiagnostics";
 import type {
   CommentPage, Detail, Paged, PlayInfo, Post, RankItem, User, VideoCard,
 } from "./types";
@@ -76,10 +77,11 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     return r;
   } catch (e) {
     const msg = typeof e === "string" ? e : "请求失败，请检查网络";
-    // 落盘完整错误链（dns error / connection refused / 证书错误…），toast 只显示截断版
-    logLine(`[api] ${cmd} → ${msg}`);
     const status = /^HTTP (\d{3})\b/.exec(msg)?.[1];
     const networkish = !status && NET_FAIL.test(msg);
+    // 落盘完整错误链（dns error / connection refused / 证书错误…），toast 只显示截断版
+    logLine(`[api] ${cmd} → ${msg}`);
+    tracePlayback("api.fail", { cmd, err: msg, status: status ?? null, networkish });
     notifyNet({ ok: false, cmd, msg, networkish });
     // 线路可能正被自动切走：给切换留一点时间，只读请求重试一次，用户就不用看见这条错误
     if (networkish && READ_ONLY.has(cmd)) {
@@ -94,6 +96,7 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
         const again = typeof e2 === "string" ? e2 : msg;
         const againStatus = /^HTTP (\d{3})\b/.exec(again)?.[1];
         logLine(`[api] ${cmd} 重试仍失败 → ${again}`);
+        tracePlayback("api.retry_failed", { cmd, err: again, status: againStatus ?? null });
         throw new Error(failMessage(again, againStatus));
       }
     }
