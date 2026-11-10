@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { tracePlayback } from "./playbackDiagnostics";
 import type {
-  CommentPage, Detail, Paged, PlayInfo, Post, RankItem, User, VideoCard,
+  CommentPage, Detail, Paged, PlayInfo, Post, RankItem, TagGroup, TopicCard, TopicDetail, User, VideoCard,
 } from "./types";
 
 /* ── 运行环境 ───────────────────────────────────────────── */
@@ -60,6 +60,7 @@ const NET_FAIL = /dns|timed? ?out|timeout|connection|refused|reset|unreachable|b
 const READ_ONLY = new Set([
   "api_me", "api_feed", "api_category", "api_rank", "api_search",
   "api_posts", "api_post", "api_post_comments", "api_video", "api_play", "api_comments",
+  "api_topics", "api_topic", "api_tags", "api_tag_videos",
 ]);
 /** 给自动选线用的观察点。api.ts 不反向依赖 autoLine，避免循环 import。 */
 export type NetObserver = (r: { ok: boolean; cmd: string; msg?: string; networkish?: boolean }) => void;
@@ -130,6 +131,11 @@ export const api = {
   me: () => call<User>("api_me"),
 
   feed: (page = 1, size = 20) => call<Paged<VideoCard>>("api_feed", { page, size }),
+  topics: () => call<{ items: TopicCard[] }>("api_topics"),
+  topic: (slug: string) => call<TopicDetail>("api_topic", { slug }),
+  tags: () => call<{ categories: TagGroup[] }>("api_tags"),
+  tagVideos: (tag: string, page = 1, size = 20) =>
+    call<Paged<VideoCard>>("api_tag_videos", { tag, page, size }),
   category: (cate: string, page = 1, size = 20) =>
     call<Paged<VideoCard>>("api_category", { cate, page, size }),
   rank: (kind: "hot" | "recommend" | "potential") =>

@@ -10,6 +10,7 @@ import Profile from "./pages/Profile";
 import SettingsPage from "./pages/Settings";
 import Feed from "./components/Feed";
 import { PostsPage, PostDetail } from "./pages/Posts";
+import { TopicsPage, TopicPage, TagsPage, TagPage } from "./pages/Discover";
 import LoginModal from "./components/LoginModal";
 import { ToastHost } from "./components/ui";
 import { DesktopRail, DesktopTitleBar } from "./components/DesktopChrome";
@@ -77,6 +78,10 @@ function StackPage({ page, onBack, wide, top, bottomInset }: {
   if (page.kind === "settings") return <SettingsPage onBack={onBack} wide={wide} />;
   if (page.kind === "posts") return <PostsPage onBack={onBack} wide={wide} />;
   if (page.kind === "post") return <PostDetail id={page.id} onBack={onBack} active={top} />;
+  if (page.kind === "topics") return <TopicsPage onBack={onBack} wide={wide} />;
+  if (page.kind === "topic") return <TopicPage slug={page.slug} name={page.name} onBack={onBack} wide={wide} />;
+  if (page.kind === "tags") return <TagsPage onBack={onBack} wide={wide} />;
+  if (page.kind === "tag") return <TagPage tag={page.tag} name={page.name} onBack={onBack} wide={wide} />;
   return null;
 }
 

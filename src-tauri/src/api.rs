@@ -561,6 +561,41 @@ pub async fn api_feed(state: State<'_, Api>, page: u32, size: u32) -> Result<Val
         .await
 }
 
+/* ───────────────────────── 专题 / 标签 ───────────────────────── */
+
+/// 专题列表：`/api/topics` 返回 data.items（标题/封面/简介/收录数）。
+#[tauri::command]
+pub async fn api_topics(state: State<'_, Api>) -> Result<Value, String> {
+    state.get("/api/topics").await
+}
+
+/// 专题详情：`/api/topics/{slug}` 返回 data = { topic, videos, related }。
+#[tauri::command]
+pub async fn api_topic(state: State<'_, Api>, slug: String) -> Result<Value, String> {
+    let encoded: String = url::form_urlencoded::byte_serialize(slug.as_bytes()).collect();
+    state.get(&format!("/api/topics/{encoded}")).await
+}
+
+/// 标签分组：`/api/tags` 返回 data.categories[]，每个含 tags[]（name/slug/hot_score）。
+#[tauri::command]
+pub async fn api_tags(state: State<'_, Api>) -> Result<Value, String> {
+    state.get("/api/tags").await
+}
+
+/// 按标签取视频：后端按中文标签名匹配（网页 /tag/<slug>/ 实际请求 /api/videos/tag/<name>）。
+#[tauri::command]
+pub async fn api_tag_videos(
+    state: State<'_, Api>,
+    tag: String,
+    page: u32,
+    size: u32,
+) -> Result<Value, String> {
+    let encoded: String = url::form_urlencoded::byte_serialize(tag.as_bytes()).collect();
+    state
+        .get(&format!("/api/videos/tag/{encoded}?page={page}&size={size}"))
+        .await
+}
+
 #[tauri::command]
 pub async fn api_category(
     state: State<'_, Api>,

@@ -117,6 +117,41 @@ export type Post = {
   publish_time?: string;
 };
 
+export type TopicCard = {
+  id: number;
+  title: string;
+  slug: string;
+  cover: string;
+  intro?: string;
+  video_count?: number;
+};
+
+export type TopicDetail = {
+  topic: TopicCard;
+  videos: Paged<VideoCard>;
+  related?: TopicCard[];
+};
+
+export type TagItem = {
+  id: number;
+  name: string;
+  slug: string;
+  cate_id?: number;
+  cate_name?: string;
+  hot_score?: number;
+  is_hot?: boolean;
+  sort?: number;
+  trend?: number;
+};
+
+export type TagGroup = {
+  code?: string;
+  id?: number;
+  name: string;
+  sort?: number;
+  tags: TagItem[];
+};
+
 export type User = {
   id: number;
   username: string;

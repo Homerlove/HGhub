@@ -27,7 +27,11 @@ export type Page =
   | { kind: "ranks"; key: string }
   | { kind: "settings"; key: string }
   | { kind: "posts"; key: string }
-  | { kind: "post"; key: string; id: number };
+  | { kind: "post"; key: string; id: number }
+  | { kind: "topics"; key: string }
+  | { kind: "topic"; key: string; slug: string; name: string }
+  | { kind: "tags"; key: string }
+  | { kind: "tag"; key: string; tag: string; name: string };
 
 export type PageInput =
   | { kind: "feed"; videoIds: number[]; index: number; title: string; source?: string; feedKind?: "video" | "post"; startEp?: number; startTime?: number }
@@ -35,7 +39,11 @@ export type PageInput =
   | { kind: "ranks" }
   | { kind: "settings" }
   | { kind: "posts" }
-  | { kind: "post"; id: number };
+  | { kind: "post"; id: number }
+  | { kind: "topics" }
+  | { kind: "topic"; slug: string; name: string }
+  | { kind: "tags" }
+  | { kind: "tag"; tag: string; name: string };
 
 export type Toast = {
   id: number;
