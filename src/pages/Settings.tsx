@@ -4,7 +4,7 @@ import { useStore } from "../store";
 import { Modal, Toggle } from "../components/ui";
 import LinePicker from "../components/LinePicker";
 import { autoLineEnabled, pickLine, setAutoLine } from "../autoLine";
-import { copyPlaybackLog, initPlaybackLog, setPlaybackLog, usePlaybackLog } from "../playbackDiagnostics";
+import { copyPlaybackLog, initPlaybackLog, setPlaybackLog, tracePlayback, usePlaybackLog } from "../playbackDiagnostics";
 import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRefresh, ISettings, ISun, IVolMute, IList } from "../icons";
 
 /* 独立设置页：线路 / 外观 / 播放 / 本地数据 / 清理缓存 / 网络诊断 / 关于
@@ -189,8 +189,17 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
             {/* 打不开时先点这里：把 DNS / 代理 / HTTP 结果复制给维护者 */}
             <button onClick={async () => {
               try {
-                const text = JSON.stringify(await api.netDiag(), null, 2);
+                const diag = await api.netDiag();
+                const text = JSON.stringify(diag, null, 2);
                 logLine(`[net_diag] ${text}`);
+                const http = (diag.http ?? {}) as { ms?: number; status?: number };
+                const dns = (diag.dns ?? {}) as { count?: number; has_fake_ip?: boolean };
+                const env = (diag.env ?? {}) as Record<string, unknown>;
+                tracePlayback("net.diag", {
+                  host: hostOf(String(diag.host ?? "")), http_status: http.status ?? null, http_ms: http.ms ?? null,
+                  dns_count: dns.count ?? null, fake_ip: dns.has_fake_ip ?? null,
+                  proxy: Object.values(env).some(Boolean), strict: strictSecurity,
+                });
                 await navigator.clipboard?.writeText(text);
                 toast("网络诊断结果已复制", "ok");
               } catch (e) {

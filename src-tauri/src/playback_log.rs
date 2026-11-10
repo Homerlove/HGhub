@@ -261,7 +261,52 @@ pub fn playback_log_read() -> Result<String, String> {
             text.push('\n');
         }
     }
+    for line in debug_lines(dir)? {
+        text.push_str(&line);
+        text.push('\n');
+    }
     Ok(text)
+}
+
+/// 始终在写的 debug.log 尾部，也转成同构记录（`debug.line`）。
+/// 好处：忘了先开诊断，复制出来也不是空的；而且整份导出依旧是一个 JSON 对象一行，
+/// 能直接 grep / jq，不会出现纯文本块。
+fn debug_lines(dir: &Path) -> Result<Vec<String>, String> {
+    let path = dir.join("debug.log");
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let bytes = fs::read(&path).map_err(|_| "无法读取日志")?;
+    let start = bytes.len().saturating_sub(64 * 1024);
+    let tail = String::from_utf8_lossy(&bytes[start..]);
+    let pid = std::process::id();
+    let stamp = crate::logging::utc_timestamp()?;
+    let strict = crate::network_policy::strict_security();
+    let mut out = Vec::new();
+    for line in tail.lines() {
+        let line = line.trim_end();
+        if line.is_empty() {
+            continue;
+        }
+        // 削掉 append_debug 加的前缀 "[ts] [pid=N] "，把时间单独放字段里
+        let (source_ts, rest) = match line.strip_prefix('[').and_then(|r| r.split_once("] ")) {
+            Some((ts, rest)) => (Some(ts), rest),
+            None => (None, line),
+        };
+        let rest = rest.strip_prefix(&format!("[pid={pid}] ")).unwrap_or(rest);
+        out.push(
+            json!({
+                "ts": stamp,
+                "pid": pid,
+                "seq": SEQ.load(Ordering::Relaxed),
+                "event": "debug.line",
+                "strict": strict,
+                "data": { "source_ts": source_ts, "text": rest.chars().take(2000).collect::<String>() },
+            })
+            .to_string(),
+        );
+    }
+    Ok(out)
 }
 
 /// 与落盘行完全同构的环境记录：版本 / 平台 / 线路 host / 严格模式。
@@ -275,7 +320,8 @@ fn env_line(host: &str) -> Result<String, String> {
         "strict": crate::network_policy::strict_security(),
         "data": {
             "version": env!("CARGO_PKG_VERSION"),
-            "target": format!("{} / {}", std::env::consts::OS, std::env::consts::ARCH),
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
             "line": host,
         },
     });
@@ -317,7 +363,7 @@ mod tests {
         assert!(text.contains("web.seek.request"));
         assert!(!text.contains("test.off"));
         // 导出的就是 JSONL 本体：环境记录 + 每行事件，一行一个对象，不掺纯文本。
-        assert!(text.contains(""diagnostics.env""));
+        assert!(text.contains("\"diagnostics.env\""));
         for line in text.lines() {
             assert!(line.starts_with('{') && line.ends_with('}'), "不是 JSONL 行: {line}");
             serde_json::from_str::<Value>(line).expect("导出行必须可解析");

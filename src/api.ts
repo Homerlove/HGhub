@@ -86,10 +86,12 @@ async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> 
     // 线路可能正被自动切走：给切换留一点时间，只读请求重试一次，用户就不用看见这条错误
     if (networkish && READ_ONLY.has(cmd)) {
       logLine(`[api] ${cmd} 链路异常，1.2s 后重试一次`);
+      tracePlayback("api.retry", { cmd, err: msg });
       await new Promise((r) => setTimeout(r, 1200));
       try {
         const r = await once();
         logLine(`[api] ${cmd} 重试成功`);
+        tracePlayback("api.retry_ok", { cmd });
         notifyNet({ ok: true, cmd });
         return r;
       } catch (e2) {

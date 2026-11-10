@@ -135,6 +135,9 @@ async function tryMain(reason: string): Promise<void> {
       `[line] main(${reason}) ok=${r.probe.ok} ms=${r.probe.ms} ` +
         `switched=${r.switched} base=${hostOf(r.base)}`,
     );
+    tracePlayback("line.main", {
+      reason, ok: r.probe.ok, ms: r.probe.ms, switched: r.switched, line: hostOf(r.base),
+    });
     if (r.switched) {
       window.dispatchEvent(
         new CustomEvent("hg:line", {
@@ -217,6 +220,7 @@ function attach(): void {
   });
   window.addEventListener("offline", () => {
     logLine("[line] offline，暂停巡检");
+    tracePlayback("line.offline");
     // 不停表：恢复后自己接上，不依赖 online 事件
     schedule(OFFLINE_RETRY_MS);
   });

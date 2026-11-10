@@ -4,7 +4,7 @@ import App from "./App";
 import { AppProvider } from "./store";
 import { invoke } from "@tauri-apps/api/core";
 import "./index.css";
-import { initPlaybackLog, installPlaybackPageEvents } from "./playbackDiagnostics";
+import { initPlaybackLog, installPlaybackPageEvents, tracePlayback } from "./playbackDiagnostics";
 import { initAutoLine } from "./autoLine";
 import { APP_VERSION, LOCAL, logLine, platform, webviewVersion } from "./api";
 import Hls from "hls.js";
@@ -20,9 +20,18 @@ logLine(
     `screen=${screen.width}x${screen.height} dpr=${devicePixelRatio} lang=${navigator.language}`,
 );
 
+/* 环境指纹也进结构化日志（开诊断后不会只有一行空跑） */
+tracePlayback("app.env", {
+  ver: APP_VERSION, platform, webview: webviewVersion,
+  engine: Hls.isSupported() ? "hls.js" : "native",
+  media_source: "MediaSource" in window, managed_media_source: "ManagedMediaSource" in window,
+  media_scheme: LOCAL.split(":")[0], screen: `${screen.width}x${screen.height}`,
+  dpr: devicePixelRatio, lang: navigator.language,
+});
 /* 运行期错误统一落到 debug.log，便于自查 */
 function report(kind: string, msg: string) {
   invoke("debug_log", { msg: `[${kind}] ${msg}` }).catch(() => {});
+  tracePlayback(`app.${kind}`, { detail: msg });
 }
 window.addEventListener("error", (e) => {
   report("error", `${e.message} @ ${e.filename}:${e.lineno}:${e.colno}`);
