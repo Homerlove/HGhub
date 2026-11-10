@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, fmt } from "../api";
+import { api, fmt, isMobile } from "../api";
 import type { HotWord, RankItem, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Masonry, RankRow } from "../components/cards";
@@ -21,8 +21,10 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
   const busy = useRef(false);
   const [hotWords, setHotWords] = useState<HotWord[]>([]);
 
+  /* 移动端进入搜索页不自动聚焦：iOS 会立刻弹键盘遮住内容（#20）。
+     桌面端没有软键盘，聚焦便于直接打字。 */
   useEffect(() => {
-    if (active && !/Android/i.test(navigator.userAgent)) inputRef.current?.focus();
+    if (active && !isMobile) inputRef.current?.focus();
   }, [active]);
 
   const refreshHot = () => {

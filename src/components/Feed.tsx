@@ -909,15 +909,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 )
               ) : null}
 
-              {/* 竖屏下的快捷操作：统一玻璃胶囊组，图标 + 短标签，细分隔线对齐 */}
+              {/* 竖屏下的快捷操作：贴左边缘竖排玻璃胶囊组，不压住画面主体（#19） */}
               {isActive && !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05 || episodes.length > 1) && (
-                <div className="absolute left-1/2 -translate-x-1/2 z-20 w-max max-w-[calc(100%-24px)] whitespace-nowrap" style={{ top: "64%" }}>
-                  <div className="inline-flex items-center gap-0.5 h-8 px-1 rounded-full backdrop-blur-xl elev-2 whitespace-nowrap"
+                <div className="absolute left-2 z-20" style={{ top: "50%", transform: "translateY(-50%)" }}>
+                  <div className="flex flex-col items-stretch gap-1 p-1 rounded-[18px] backdrop-blur-xl elev-2"
                     style={{ background: "rgba(12,15,22,.58)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.09)" }}>
                     {episodes.length > 1 && (
                       <button type="button" aria-pressed={swipeEp}
                         onClick={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
-                        className="shrink-0 whitespace-nowrap flex items-center gap-1.5 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                        className="whitespace-nowrap flex items-center justify-center gap-1.5 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                         style={swipeEp ? { background: "rgba(255,255,255,.14)", color: "#fff" } : { color: "rgba(255,255,255,.72)" }}>
                         <IVertSwap size={13} />
                         <span>切集</span>
@@ -926,17 +926,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     )}
                     {landscapeVideo && (
                       <>
-                        {episodes.length > 1 && <span className="shrink-0 w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />}
                         <button type="button" onClick={() => {
                           if (zoom.s > 1.05) { setZoom({ s: 1, x: 0, y: 0, g: false }); setPortraitFit("contain"); }
                           else setPortraitFit((f) => (f === "contain" ? "cover" : "contain"));
-                        }} className="shrink-0 whitespace-nowrap flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                        }} className="whitespace-nowrap flex items-center justify-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                           style={{ color: "rgba(255,255,255,.9)" }}>
                           {zoom.s > 1.05 ? `还原 ${zoom.s.toFixed(1)}x` : portraitFit === "contain" ? "铺满" : "适应"}
                         </button>
-                        <span className="shrink-0 w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />
                         <button type="button" onClick={() => enterFs(true)}
-                          className="shrink-0 whitespace-nowrap flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                          className="whitespace-nowrap flex items-center justify-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                           style={{ color: "rgba(255,255,255,.9)" }}>
                           <IExpand size={13} /><span>横屏</span>
                         </button>
@@ -944,9 +942,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     )}
                     {!landscapeVideo && zoom.s > 1.05 && (
                       <>
-                        {episodes.length > 1 && <span className="shrink-0 w-px h-4 mx-0.5" style={{ background: "rgba(255,255,255,.12)" }} />}
                         <button type="button" onClick={() => setZoom({ s: 1, x: 0, y: 0, g: false })}
-                          className="shrink-0 whitespace-nowrap flex items-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                          className="whitespace-nowrap flex items-center justify-center gap-1 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                           style={{ color: "rgba(255,255,255,.9)" }}>
                           还原 {zoom.s.toFixed(1)}x
                         </button>
