@@ -486,6 +486,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     }
     const g = gesture.current;
     gesture.current = null;
+    /* 长按状态必须无条件复位：切集 / 组件重建会把手势对象清掉，
+       但 holdRef 若留在 true，下面的 touchmove 会一直 preventDefault，
+       整个列表就再也滑不动（表现为「播放后不能上滑」）。 */
+    if (holdRef.current) { holdRef.current = false; setHoldSpeed(false); }
+    if (lockArmedRef.current) { lockArmedRef.current = false; setLockArmed(false); }
     if (!g) return;
     if (g.timer) window.clearTimeout(g.timer);
 
@@ -507,6 +512,25 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       scrubTarget.current = null;
       if (g.playing && active) videoRef.current?.play();
       return;
+    }
+    /* 列表已经在顶 / 底，原生滚动没有相邻屏可滑，直接在原地切一集，
+       否则第一部的「上一集」永远滑不到。 */
+    if (!cancelled && e && g.mode === "pan") {
+      const dy = e.clientY - g.startY;
+      const dx2 = e.clientX - g.x;
+      if (Math.abs(dy) > 56 && Math.abs(dy) > Math.abs(dx2)) {
+        const dir = dy < 0 ? 1 : -1;
+        const el = boxRef.current;
+        const ep = epMap[curId] || 1;
+        const total = episodes.length;
+        const want = dir === 1 ? (total === 0 || ep < total ? ep + 1 : 0) : (ep > 1 ? ep - 1 : 0);
+        const atEdge = !el || (dir === 1 ? el.scrollTop + el.clientHeight >= el.scrollHeight - 2 : el.scrollTop <= 2);
+        if (swipeEp && kind === "video" && want && atEdge) {
+          setEpMap((m) => ({ ...m, [curId]: want }));
+          toast(`第 ${want}集${total ? ` / ${total}` : ""}`, "info");
+          return;
+        }
+      }
     }
     if (!cancelled && g.mode === "idle" && Date.now() - g.t < 260) {
       // 双击 = 暂停/播放；单击 = 净屏/还原（延迟 230ms 等第二击）
@@ -532,6 +556,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   useEffect(() => () => {
     if (gesture.current?.timer) window.clearTimeout(gesture.current.timer);
     gesture.current = null;
+    holdRef.current = false;
+    lockArmedRef.current = false;
   }, [playKey]);
 
   /* 进出全屏：iOS 会在这时把播放打断，过渡期多补几次 play() */
@@ -583,7 +609,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (isDesktop) return undefined;
     const el = boxRef.current;
     if (!el) return undefined;
-    const fn = (e: TouchEvent) => { if (holdRef.current) e.preventDefault(); };
+    const fn = (e: TouchEvent) => { if (holdRef.current && gesture.current?.mode === "hold") e.preventDefault(); };
     el.addEventListener("touchmove", fn, { passive: false });
     return () => el.removeEventListener("touchmove", fn);
     // eslint-disable-next-line react-hooks/exhaustive-deps
