@@ -70,6 +70,11 @@ objc2-ui-kit = { version = "0.3", default-features = false, features = [
   "UIWindow",
   "UIGeometry",
 ] }
+objc2-web-kit = { version = "0.3", default-features = false, features = [
+  "std",
+  "WKWebViewConfiguration",
+  "WKPreferences",
+] }
 
 [profile.release]
 panic = "abort"
