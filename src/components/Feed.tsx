@@ -913,7 +913,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
               {/* 竖屏下的快捷操作（#19）：
                   横版视频 → 保持原样，居中横排一条（画面上下有黑边，居中不压主体）；
-                  竖版视频 → 只剩「切集」一个按钮，贴左边缘竖排，避免压住画面正中。
+                  竖版视频 → 只剩「切集」图标，贴右边缘，避免压住画面正中。
                   显隐用 opacity + 轻微位移过渡（不卸载），净屏/全屏时慢慢淡出。 */}
               {!isDesktop && (
                 <div
@@ -922,7 +922,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     : "absolute z-20"}
                   aria-hidden={!(isActive && capsuleOn)}
                   style={{
-                    left: landscapeVideo ? "50%" : 8,
+                    left: landscapeVideo ? "50%" : undefined,
+                    right: landscapeVideo ? undefined : 8,
                     top: landscapeVideo ? "64%" : "50%",
                     transform: landscapeVideo
                       ? `translate(-50%, ${isActive && capsuleOn ? 0 : 10}px)`
@@ -936,12 +937,12 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     : "flex flex-col items-stretch gap-1 p-1 rounded-[18px] backdrop-blur-xl elev-2"}
                     style={{ background: "rgba(12,15,22,.58)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.09)" }}>
                     {episodes.length > 1 && (
-                      <button type="button" aria-pressed={swipeEp}
+                      <button type="button" aria-pressed={swipeEp} aria-label="上下划切集开关"
                         onClick={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
-                        className="whitespace-nowrap flex items-center justify-center gap-1.5 h-[26px] px-3 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
+                        className="whitespace-nowrap flex items-center justify-center gap-1.5 h-[26px] px-2.5 rounded-full text-[11px] font-semibold pressable transition-colors duration-150"
                         style={swipeEp ? { background: "rgba(255,255,255,.14)", color: "#fff" } : { color: "rgba(255,255,255,.72)" }}>
                         <IVertSwap size={13} />
-                        <span>切集</span>
+                        
                         <span className="shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: swipeEp ? "#5ee7a0" : "rgba(255,255,255,.28)" }} />
                       </button>
                     )}
