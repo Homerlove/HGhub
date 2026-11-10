@@ -206,6 +206,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 沉浸全屏 + 横屏视频 → 舞台旋转 90°，看起来就是横屏 */
   const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0 && !vpLandscape;
   const landscapeVideo = vsize.w > 0 && vsize.h > 0 && vsize.w > vsize.h;
+  /* 竖屏快捷胶囊的显隐：不卸载、只改 opacity，这样淡入淡出都能过渡（#19） */
+  const capsuleOn = !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05 || episodes.length > 1);
   const isLandscapeCurrent = useCallback(() => {
     if (vsize.w > 0 && vsize.h > 0) return vsize.w > vsize.h;
     const v = videoRef.current?.el();
@@ -909,10 +911,29 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 )
               ) : null}
 
-              {/* 竖屏下的快捷操作：贴左边缘竖排玻璃胶囊组，不压住画面主体（#19） */}
-              {isActive && !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05 || episodes.length > 1) && (
-                <div className="absolute left-2 z-20" style={{ top: "50%", transform: "translateY(-50%)" }}>
-                  <div className="flex flex-col items-stretch gap-1 p-1 rounded-[18px] backdrop-blur-xl elev-2"
+              {/* 竖屏下的快捷操作（#19）：
+                  横版视频 → 保持原样，居中横排一条（画面上下有黑边，居中不压主体）；
+                  竖版视频 → 只剩「切集」一个按钮，贴左边缘竖排，避免压住画面正中。
+                  显隐用 opacity + 轻微位移过渡（不卸载），净屏/全屏时慢慢淡出。 */}
+              {!isDesktop && (
+                <div
+                  className={landscapeVideo
+                    ? "absolute z-20 w-max max-w-[calc(100%-24px)] whitespace-nowrap"
+                    : "absolute z-20"}
+                  aria-hidden={!(isActive && capsuleOn)}
+                  style={{
+                    left: landscapeVideo ? "50%" : 8,
+                    top: landscapeVideo ? "64%" : "50%",
+                    transform: landscapeVideo
+                      ? `translate(-50%, ${isActive && capsuleOn ? 0 : 10}px)`
+                      : `translateY(calc(-50% + ${isActive && capsuleOn ? 0 : 10}px))`,
+                    opacity: isActive && capsuleOn ? 1 : 0,
+                    pointerEvents: isActive && capsuleOn ? "auto" : "none",
+                    transition: "opacity .38s cubic-bezier(.4,0,.2,1), transform .38s cubic-bezier(.4,0,.2,1)",
+                  }}>
+                  <div className={landscapeVideo
+                    ? "inline-flex items-center gap-0.5 h-8 px-1 rounded-full backdrop-blur-xl elev-2 whitespace-nowrap"
+                    : "flex flex-col items-stretch gap-1 p-1 rounded-[18px] backdrop-blur-xl elev-2"}
                     style={{ background: "rgba(12,15,22,.58)", boxShadow: "inset 0 0 0 1px rgba(255,255,255,.09)" }}>
                     {episodes.length > 1 && (
                       <button type="button" aria-pressed={swipeEp}
@@ -1218,6 +1239,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               className={`ml-auto shrink-0 flex items-center gap-1 px-2.5 h-8 rounded-full text-[12px] font-bold pressable ${effRate !== 1 ? "bg-primary text-on-primary" : "hg-chip hg-ink-2"}`}>
               <IBoltF size={12} />{effRate}x
             </button>
+            {curEp < episodes.length && (
+              <button onClick={() => pickEp(curEp + 1)}
+                className="shrink-0 flex items-center gap-1 px-2.5 h-8 rounded-full text-[12px] font-semibold hg-chip hg-ink-2 pressable"
+                aria-label={`下一集 第${curEp + 1}集`}>
+                <IVertSwap size={12} />下集
+              </button>
+            )}
             <span className="shrink-0 text-[11.5px] hg-ink-4 tabular-nums">{fmtTime(duration)}</span>
           </div>
         </>
