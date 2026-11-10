@@ -492,6 +492,48 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     gesture.current = null;
   }, [playKey]);
 
+  /* 进出全屏：iOS 会在这时把播放打断，过渡期多补几次 play() */
+  const keepAlive = useCallback(() => {
+    for (const t of keepAliveTimers.current) window.clearTimeout(t);
+    keepAliveTimers.current = [];
+    for (const delay of [50, 150, 300, 500, 800, 1200]) {
+      keepAliveTimers.current.push(window.setTimeout(() => {
+        const v = videoRef.current?.el();
+        if (v && v.paused) videoRef.current?.play();
+      }, delay) as unknown as number);
+    }
+  }, []);
+
+  const enterFs = useCallback((landscape: boolean) => {
+    setFs(true);
+    keepAlive();
+    if (!isDesktop) { try { void invoke("set_orientation", { landscape }); } catch { /* ignore */ } }
+  }, [isDesktop, keepAlive, setFs]);
+
+  const exitFs = useCallback(() => {
+    setFs(false);
+    keepAlive();
+    if (!isDesktop) { try { void invoke("set_orientation", { landscape: false }); } catch { /* ignore */ } }
+  }, [isDesktop, keepAlive, setFs]);
+
+  /* 系统真旋转了（iOS 原生请求成功后），CSS 就不再转 90° */
+  useEffect(() => {
+    if (isDesktop) return undefined;
+    const sync = () => setVpLandscape(window.innerWidth > window.innerHeight);
+    sync();
+    window.addEventListener("resize", sync);
+    window.addEventListener("orientationchange", sync);
+    return () => {
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("orientationchange", sync);
+    };
+  }, [isDesktop]);
+
+  useEffect(() => () => {
+    for (const t of keepAliveTimers.current) window.clearTimeout(t);
+    keepAliveTimers.current = [];
+  }, []);
+
   const lockControls = () => { setPanel(null); setControlsLocked(true); };
 
   /* 长按倍速期间禁止原生滚动，否则上滑会被列表吃掉、锁不住倍速 */
@@ -681,10 +723,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     <ICommentF size={26} className="hg-ink hg-ov-shadow" />
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">评论</span>
                   </button>
-                  <button onClick={() => {
-                    setFs(true);
-                    if (!isDesktop) { try { void invoke("set_orientation", { landscape: vsize.w > vsize.h && vsize.h > 0 }); } catch { /* ignore */ } }
-                  }} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
+                  <button onClick={() => enterFs(vsize.w > vsize.h && vsize.h > 0)} className="flex flex-col items-center gap-1 pressable" aria-label="全屏">
                     <IExpand size={26} className="hg-ink hg-ov-shadow" />
                     <span className="text-[10.5px] hg-ink-2 hg-ov-shadow">全屏</span>
                   </button>
@@ -899,7 +938,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       {/* 移动端：沉浸全屏（安卓 WebView 不支持 Fullscreen API，改用应用内沉浸层） */}
       {!isDesktop && fs && (
         <>
-          <button onClick={() => setFs(false)} aria-label="退出全屏"
+          <button onClick={exitFs} aria-label="退出全屏"
             className="hg-chip-strong absolute right-3 z-40 w-9 h-9 rounded-full backdrop-blur-md flex items-center justify-center pressable elev-1"
             style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
             <ICompress size={18} />
