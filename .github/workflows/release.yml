@@ -311,6 +311,7 @@ jobs:
     env:
       CARGO_PROFILE_RELEASE_LTO: ${{ inputs.quick && 'thin' || 'true' }}
       CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.quick && '4' || '1' }}
+      APPLE_DEVELOPMENT_TEAM: "ABCDE12345"
     steps:
       - uses: actions/checkout@v7
 
@@ -338,7 +339,7 @@ jobs:
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
       - uses: swatinem/rust-cache@v2.9.3
         continue-on-error: true
         timeout-minutes: 8
@@ -347,58 +348,29 @@ jobs:
           key: ios
       - run: pnpm install --frozen-lockfile
 
-      - name: 生成 iOS 工程
-        run: pnpm tauri ios init --ci
-
-      - name: 替换 Rust 构建脚本
-        run: python3 scripts/patch-ios-pbxproj.py
-
-      - name: 前端构建
-        run: pnpm build && node scripts/sync-android-icons.mjs
-
-      - name: 认工程名和 scheme
-        id: proj
-        shell: bash
+      # 跟上游一致：不在 pbxproj 里绕开 xcode-script，而是让 tauri ios build 的
+      # options server 活着，由 Xcode 用 release 配置跑 Build Rust Code。
+      - name: 生成 iOS 工程（带横竖屏 + ATS）
         run: |
-          ls -la src-tauri/gen/apple
-          cd src-tauri/gen/apple
-          P="$(ls -d *.xcodeproj | head -1)"
-          S="$(xcodebuild -list -project "$P" 2>/dev/null | awk '/Schemes:/{f=1;next} f&&NF{print $1;exit}')"
-          echo "xcodeproj=$P" >> "$GITHUB_OUTPUT"
-          echo "scheme=$S" >> "$GITHUB_OUTPUT"
-          echo "project=$P scheme=$S"
+          pnpm tauri ios init --ci
+          for plist in $(find src-tauri/gen/apple -name "Info.plist" 2>/dev/null); do
+            for key in "UISupportedInterfaceOrientations" "UISupportedInterfaceOrientations~iphone" "UISupportedInterfaceOrientations~ipad"; do
+              /usr/libexec/PlistBuddy -c "Delete :${key}" "$plist" 2>/dev/null || true
+              /usr/libexec/PlistBuddy -c "Add :${key} array" "$plist"
+              /usr/libexec/PlistBuddy -c "Add :${key}:0 string UIInterfaceOrientationPortrait" "$plist"
+              /usr/libexec/PlistBuddy -c "Add :${key}:1 string UIInterfaceOrientationLandscapeLeft" "$plist"
+              /usr/libexec/PlistBuddy -c "Add :${key}:2 string UIInterfaceOrientationLandscapeRight" "$plist"
+            done
+            /usr/libexec/PlistBuddy -c "Delete :NSAppTransportSecurity" "$plist" 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity dict" "$plist"
+            /usr/libexec/PlistBuddy -c "Add :NSAppTransportSecurity:NSAllowsArbitraryLoads bool true" "$plist"
+          done
 
-      - name: 构建（无签名 archive）
+      - name: 构建并打包 ipa
         shell: bash
-        run: |
-          set -euo pipefail
-          cd src-tauri/gen/apple
-          xcodebuild -project "${{ steps.proj.outputs.xcodeproj }}" \
-            -scheme "${{ steps.proj.outputs.scheme }}" \
-            -configuration release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/HGhub.xcarchive" \
-            archive \
-            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
-            OTHER_LDFLAGS='$(inherited) -Wl,-undefined,dynamic_lookup' \
-            IPHONEOS_DEPLOYMENT_TARGET=15.0 \
-            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | tail -50
-
-      - name: 打包 ipa
-        shell: bash
-        run: |
-          set -euo pipefail
-          APP_DIR="$RUNNER_TEMP/HGhub.xcarchive/Products/Applications"
-          ls -la "$APP_DIR"
-          APP="$(ls -d "$APP_DIR"/*.app | head -1)"
-          mkdir -p artifacts "$RUNNER_TEMP/Payload"
-          cp -R "$APP" "$RUNNER_TEMP/Payload/"
-          cd "$RUNNER_TEMP"
-          /usr/bin/zip -qry "$GITHUB_WORKSPACE/artifacts/HGhub_${{ steps.ver.outputs.version }}_ios.ipa" Payload
-          cd "$GITHUB_WORKSPACE"
-          unzip -l "artifacts/HGhub_${{ steps.ver.outputs.version }}_ios.ipa" | head -8
-          ls -lh artifacts
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+        run: bash scripts/build-ios-unsigned.sh "$APP_VERSION"
 
       - uses: actions/upload-artifact@v7
         with:
