@@ -12,7 +12,7 @@ import { setBackHandler } from "../back";
 import { tracePlayback } from "../playbackDiagnostics";
 import {
   IBack, IBoltF, IChevR, IChevronDown, IChevronUp, IClose, ICommentF, ICompress, IExpand, IFileText, IHeart, IHeartF,
-  ILink, IList, ILockF, IPauseF, IPlayF, ISearch, IStar, IStarF, IVol, IVolMute,
+  ILink, IList, ILockF, IPauseF, IPlayF, ISearch, IStar, IStarF, IVertSwap, IVol, IVolMute,
 } from "../icons";
 
 type Props = {
@@ -36,7 +36,7 @@ const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, "
 
 export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, startEp, startTime }: Props) {
   const store = useStore();
-  const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, swipeEp } = store;
+  const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, swipeEp, setSwipeEp } = store;
   const isDesktop = !isMobile;
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -792,8 +792,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               ) : null}
 
               {/* 竖屏下看横屏视频：快捷「放大铺满 / 完整适应 / 横屏全屏」与缩放复位胶囊 */}
-              {isActive && !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05) && (
+              {isActive && !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05 || episodes.length > 1) && (
                 <div className="absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2" style={{ top: "64%" }}>
+                  {episodes.length > 1 && (
+                    <button type="button" aria-pressed={swipeEp}
+                      onClick={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
+                      className={`backdrop-blur-md px-3 h-7 rounded-full text-[11.5px] font-semibold flex items-center gap-1.5 pressable elev-1 ${swipeEp ? "hg-chip-strong" : "hg-chip"}`}>
+                      <IVertSwap size={12} />上下划切集 · {swipeEp ? "开" : "关"}
+                    </button>
+                  )}
                   {landscapeVideo && (
                     <>
                       <button type="button" onClick={() => {
@@ -1023,7 +1030,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       )}
       {!isDesktop && holdSpeed && (
         <div
-          className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 h-10 rounded-xl backdrop-blur-md elev-2 transition-all duration-200 ${lockArmed ? "bg-primary text-on-primary scale-110" : "hg-chip-strong hg-ink-2"}`}
+          className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 h-10 rounded-xl backdrop-blur-md elev-2 ${lockArmed ? "bg-primary text-on-primary" : "hg-chip-strong hg-ink-2"}`}
           style={{ top: "38%" }}>
           <ILockF size={16} />
           <span className="text-[12.5px] font-bold">{lockArmed ? "松开锁定 2.0x" : "上滑到此锁定倍速"}</span>
