@@ -523,10 +523,23 @@ jobs:
       - name: 列出待发布文件
         run: ls -lh artifacts
 
+      - name: 取版本说明
+        id: notes
+        run: |
+          TAG="${{ inputs.tag != '' && inputs.tag || github.ref_name }}"
+          F="docs/release-notes/${TAG}.md"
+          if [ -f "$F" ]; then
+            echo "body_path=$F" >> "$GITHUB_OUTPUT"
+            echo "使用 $F"
+          else
+            echo "body_path=" >> "$GITHUB_OUTPUT"
+            echo "没有 $F，回退自动生成的说明"
+          fi
       - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          body_path: ${{ steps.notes.outputs.body_path }}
           files: artifacts/*
           generate_release_notes: true
           fail_on_unmatched_files: true
