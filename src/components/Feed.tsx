@@ -610,6 +610,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         lastTapRef.current.timer = window.setTimeout(() => {
           lastTapRef.current.timer = null;
           setClean((v) => !v);
+          if (!isDesktop && fs) setIdle((v) => !v);
         }, 230) as unknown as number;
       }
     }
@@ -643,6 +644,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const enterFs = useCallback((landscape: boolean) => {
     setClean(false);
     setFs(true);
+    wake();
     keepAlive();
     if (!isDesktop) {
       try { void invoke("set_orientation", { landscape }); } catch { /* ignore */ }
@@ -833,7 +835,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   return (
     <div
       className={`hg-player-ui ${rotated ? "fs-landscape" : (!isDesktop && fs ? "fs-immersive" : "absolute inset-0")} overflow-hidden bg-black player-root ${controlsLocked ? "is-locked" : ""} ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${isDesktop && idle ? "is-idle" : ""}`}
-      onPointerMove={() => { if (isDesktop) wake(); }}>
+      onPointerMove={() => { if (isDesktop || fs) wake(); }}
+      onPointerDown={() => { if (!isDesktop && fs) wake(); }}>
       <div className="absolute inset-0" inert={controlsLocked}>
       {/* 氛围背景 */}
       <div className="absolute inset-0 scale-110 blur-3xl opacity-25 pointer-events-none">
@@ -1194,7 +1197,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       )}
 
       {/* 移动端：倍速状态 / 锁定提示 */}
-      {!isDesktop && (holdSpeed || speedLock || rate !== 1) && (
+      {!isDesktop && (holdSpeed || speedLock || rate !== 1) && (!fs || !idle) && (
         <button
           onClick={() => {
             if (speedLock) { setSpeedLock(false); toast("已解除倍速锁定", "info"); }
@@ -1216,7 +1219,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       )}
 
       {/* 移动端全屏模式下的进度条（普通模式的进度条在底部灰块里） */}
-      {!isDesktop && fs && (
+      {!isDesktop && fs && !idle && (
         <div
           className="absolute inset-x-0 z-30 px-4"
           style={{
@@ -1235,7 +1238,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       )}
 
       {/* 移动端：沉浸全屏（安卓 WebView 不支持 Fullscreen API，改用应用内沉浸层） */}
-      {!isDesktop && fs && (
+      {!isDesktop && fs && !idle && (
         <>
           <button onClick={exitFs} aria-label="退出全屏"
             className="hg-chip-strong absolute z-40 w-9 h-9 rounded-full backdrop-blur-md flex items-center justify-center pressable elev-1"
@@ -1391,7 +1394,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         </>
       )}
       </div>
-      {!isDesktop && !controlsLocked && active && (
+      {!isDesktop && !controlsLocked && active && (!fs || !idle) && (
         <div className={`absolute z-40 flex items-center gap-2 ${fs ? "" : "right-3"}`}
           style={{
             top: rotated ? 12 : "calc(var(--sat, 0px) + 6px)",
