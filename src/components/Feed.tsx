@@ -234,6 +234,32 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     el.scrollTo({ top: next * el.clientHeight, behavior: "smooth" });
   }, [index, videoIds.length]);
 
+  /* 统一的上下切换：swipeEp 开启且为多集视频时优先切集，否则切剧。
+     桌面端键盘 ↑↓ 与右侧按钮都走这里，和移动端上下划手势保持一致。 */
+  const stepDir = useCallback((dir: number) => {
+    if (swipeEp && kind === "video") {
+      const ep = epMap[curId] || 1;
+      const total = episodes.length;
+      const want = dir === 1 ? (total === 0 || ep < total ? ep + 1 : 0) : (ep > 1 ? ep - 1 : 0);
+      if (want) {
+        setEpMap((m) => ({ ...m, [curId]: want }));
+        setPanel(null);
+        return;
+      }
+    }
+    go(dir);
+  }, [swipeEp, kind, epMap, curId, episodes.length, go]);
+
+  const canStep = (dir: number) => {
+    if (swipeEp && kind === "video") {
+      const ep = epMap[curId] || 1;
+      const total = episodes.length;
+      if (dir === 1 ? (total === 0 || ep < total) : ep > 1) return true;
+    }
+    const next = index + dir;
+    return next >= 0 && next < videoIds.length;
+  };
+
   /* 初始定位 */
   useEffect(() => {
     const el = boxRef.current;
@@ -353,8 +379,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
       if (panel) { if (e.key === "Escape") setPanel(null); return; }
       switch (e.key) {
-        case "ArrowDown": e.preventDefault(); go(1); break;
-        case "ArrowUp": e.preventDefault(); go(-1); break;
+        case "ArrowDown": e.preventDefault(); stepDir(1); break;
+        case "ArrowUp": e.preventDefault(); stepDir(-1); break;
         case " ": e.preventDefault(); videoRef.current?.toggle(); break;
         case "ArrowLeft": e.preventDefault(); videoRef.current?.seek(Math.max(0, time - 5), "keyboard_shortcut"); break;
         case "ArrowRight": e.preventDefault(); videoRef.current?.seek(time + 5, "keyboard_shortcut"); break;
@@ -371,7 +397,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     window.addEventListener("keydown", fn);
     return () => window.removeEventListener("keydown", fn);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, controlsLocked, panel, time, index]);
+  }, [active, controlsLocked, panel, time, index, stepDir]);
 
   /* 安卓返回键：面板打开时先关面板 */
   useEffect(() => {
@@ -865,10 +891,10 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               {!fs && !clean && isDesktop && (
               <div className="absolute z-20 flex flex-col items-center desktop-social">
                 <div className="desktop-browse-inline">
-                  <button onClick={() => go(-1)} disabled={index === 0} aria-label="上一个" title="上一个 ↑">
+                  <button onClick={() => stepDir(-1)} disabled={!canStep(-1)} aria-label="上一个" title="上一个 ↑">
                     <IChevronUp size={19} strokeWidth={1.8} />
                   </button>
-                  <button onClick={() => go(1)} disabled={index >= videoIds.length - 1} aria-label="下一个" title="下一个 ↓">
+                  <button onClick={() => stepDir(1)} disabled={!canStep(1)} aria-label="下一个" title="下一个 ↓">
                     <IChevronDown size={19} strokeWidth={1.8} />
                   </button>
                   <small>{String(index + 1).padStart(2, "0")} / {String(videoIds.length).padStart(2, "0")}</small>
@@ -1010,6 +1036,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           seekKey={playKey}
           nextDisabled={!episodes.some((e) => e.ep_num === curEp + 1) && index >= videoIds.length - 1}
           nextTitle={episodes.some((e) => e.ep_num === curEp + 1) ? "下一集 E" : "下一部 ↓"}
+          swipeEp={swipeEp}
+          onToggleSwipe={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
           onToggle={() => videoRef.current?.toggle()}
           onSeek={(t, source) => { videoRef.current?.seek(t, source); setTime(t); }}
           onSeekInteraction={(phase, input, target, pointerTarget) => videoRef.current?.trace(`seek.input.${phase}`, { input, target, pointer_target: pointerTarget })}
