@@ -136,6 +136,10 @@ pub fn run() {
                         .insert("Access-Control-Allow-Origin", origin);
                     resp.headers_mut()
                         .insert("Vary", tauri::http::HeaderValue::from_static("Origin"));
+                } else {
+                    // WKWebView 内部页面可能不给 Origin；这时回 * 才能拿到分片
+                    resp.headers_mut()
+                        .insert("Access-Control-Allow-Origin", tauri::http::HeaderValue::from_static("*"));
                 }
                 responder.respond(resp);
             });
@@ -160,6 +164,7 @@ pub fn run() {
             api::download_update,
             api::install_update,
             api::open_url,
+            api::set_orientation,
             api::api_login,
             api::api_register,
             api::api_logout,
