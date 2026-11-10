@@ -235,7 +235,6 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
       onPause={() => onPause?.()}
       onWaiting={() => onWaiting?.()}
       onPlaying={() => { if (activity.isActive()) onPlaying?.(); }}
-      onSeeked={() => { try { videoRef.current?.play().catch(() => {}); } catch { /* ignore */ } }}
       onEnded={() => { if (activity.isActive()) onEnded?.(); }}
       onError={handleVideoError}
     />
