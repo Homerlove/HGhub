@@ -270,6 +270,31 @@ export default function App() {
     tracePlayback("navigation.change", { tab, stack: stack.map(p => ({ page: p.kind, key: p.key })), login_open: loginOpen });
   }, [tab, stack, loginOpen]);
 
+  /* iOS：长按快进会触发 WKWebView 系统文本选择放大镜（loupe），纯 CSS 挡不住。
+     原生层已默认关闭文本交互（isTextInteractionEnabled=false）；这里在用户触碰输入框时
+     重新打开、失焦时再关闭，避免影响搜索/评论/登录等文本输入。 */
+  useEffect(() => {
+    if (platform !== "ios") return;
+    const setTI = (enabled: boolean) => invoke("set_text_interaction", { enabled }).catch(() => {});
+    const INPUTS = 'input, textarea, [contenteditable="true"]';
+    const onDown = (e: Event) => {
+      const t = e.target as HTMLElement | null;
+      if (t && typeof t.closest === "function" && t.closest(INPUTS)) setTI(true);
+    };
+    const onFocusOut = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && typeof t.closest === "function" && t.closest(INPUTS)) setTI(false);
+    };
+    document.addEventListener("touchstart", onDown, { capture: true, passive: true });
+    document.addEventListener("pointerdown", onDown, { capture: true, passive: true });
+    document.addEventListener("focusout", onFocusOut, true);
+    return () => {
+      document.removeEventListener("touchstart", onDown, true);
+      document.removeEventListener("pointerdown", onDown, true);
+      document.removeEventListener("focusout", onFocusOut, true);
+    };
+  }, [platform]);
+
   /* —— 安卓硬件返回键 ——
      层级：全屏 → 面板/弹层 → 登录框 → 页面栈 → 回首页 → 退出应用。
      不注册这个监听，Tauri 会直接 webView.goBack() 或退出，表现就是「任意页面返回都回桌面」。 */

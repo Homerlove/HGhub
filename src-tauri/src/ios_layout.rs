@@ -1,7 +1,35 @@
 //! iOS WKWebView safe-area & viewport normalization.
+use std::ffi::c_void;
+
 use objc2::{msg_send, rc::Retained};
 use objc2_ui_kit::{UIScrollView, UIScrollViewContentInsetAdjustmentBehavior, UIView};
+use objc2_web_kit::WKWebViewConfiguration;
 use tauri::Manager;
+
+/// iOS 14.5+：WKWebView 长按会弹出系统文本选择放大镜（loupe）。
+/// 纯 CSS `-webkit-user-select:none` 挡不住它；唯一可靠开关是
+/// `WKPreferences.isTextInteractionEnabled = false`。代价是它会连 `<input>/<textarea>`
+/// 一起禁用，因此默认关闭，前端在输入框获得焦点时再调用 `set_text_interaction` 重新打开。
+pub(crate) fn set_text_interaction_on_webview(webview: &tauri::Webview, enabled: bool) {
+    let _ = webview.with_webview(move |platform| {
+        set_text_interaction(platform.inner(), enabled);
+    });
+}
+
+fn set_text_interaction(inner: *mut c_void, enabled: bool) {
+    unsafe {
+        // objc2_web_kit 的 `WKWebView` 类型只在 macOS 导出；iOS 上 WKWebView 是 UIView 子类，
+        // 这里把指针当 UIView 用，直接发 `configuration` selector，配置/偏好再走 iOS 可用的类型。
+        let Some(view) = inner.cast::<UIView>().as_ref() else {
+            return;
+        };
+        // 链接长按预览与文本选择放大镜同源触发，一并关掉，避免长按快进误弹预览。
+        let config: Retained<WKWebViewConfiguration> = msg_send![view, configuration];
+        let prefs = config.preferences();
+        prefs.setTextInteractionEnabled(enabled);
+        let _: () = msg_send![view, setAllowsLinkPreview: false];
+    }
+}
 
 pub(crate) fn apply(webview: &tauri::Webview, nudge_frame: bool) {
     let Ok(dir) = webview.app_handle().path().app_data_dir() else {

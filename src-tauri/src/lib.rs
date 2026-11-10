@@ -62,6 +62,9 @@ pub fn run() {
                 let finished = payload.event() == tauri::webview::PageLoadEvent::Finished;
                 ios_layout::apply(webview, finished);
                 if finished {
+                    // 默认关闭 WKWebView 文本交互，消除视频长按快进时的系统放大镜。
+                    // 前端在输入框聚焦时再按需打开（见 api::set_text_interaction）。
+                    ios_layout::set_text_interaction_on_webview(webview, false);
                     let wv = (*webview).clone();
                     tauri::async_runtime::spawn(async move {
                         for delay_ms in [80_u64, 350] {
@@ -183,6 +186,7 @@ pub fn run() {
             api::check_update,
             api::open_url,
             api::set_orientation,
+            api::set_text_interaction,
             api::api_login,
             api::api_register,
             api::api_logout,

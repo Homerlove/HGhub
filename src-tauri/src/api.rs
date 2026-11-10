@@ -339,6 +339,25 @@ pub async fn set_orientation(app: tauri::AppHandle, landscape: bool) -> Result<(
     Ok(())
 }
 
+/// iOS 专用：切换 WKWebView 文本交互。
+/// 主界面默认关闭以消除长按快进时的系统放大镜；输入框聚焦时前端调用此命令重新打开，
+/// 失焦后再关闭，避免影响搜索/评论/登录等文本输入。
+#[tauri::command]
+pub fn set_text_interaction(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(target_os = "ios")]
+    {
+        use tauri::Manager;
+        if let Some(window) = app.get_webview_window("main") {
+            crate::ios_layout::set_text_interaction_on_webview(window.as_ref(), enabled);
+        }
+    }
+    #[cfg(not(target_os = "ios"))]
+    {
+        let _ = (&app, enabled);
+    }
+    Ok(())
+}
+
 #[cfg(target_os = "ios")]
 fn request_ios_orientation(landscape: bool) {
     use std::ffi::{c_char, c_void};
