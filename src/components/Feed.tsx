@@ -112,7 +112,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 单击 / 双击判定：单击净屏，双击暂停 */
   const lastTapRef = useRef<{ timer: number | null }>({ timer: null });
   /* 系统是否真的转成了横屏（iOS 原生旋转后为 true） */
-  const [vpLandscape, setVpLandscape] = useState(false);
+  const [vpLandscape, setVpLandscape] = useState(
+    () => typeof window !== "undefined" && window.innerWidth > window.innerHeight,
+  );
   /* 进出全屏过渡期多次续播，防止 iOS 把播放打断 */
   const keepAliveTimers = useRef<number[]>([]);
   /* 双指缩放：scale 1~4，平移跟手指 */
@@ -220,6 +222,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
   /* 滚动定位 */
   const onScroll = useCallback(() => {
+    if (fs || pinchRef.current) return;
     const el = boxRef.current;
     if (!el) return;
     const h = el.clientHeight || 1;
@@ -227,7 +230,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (onNearEnd && i >= videoIds.length - 3) onNearEnd();
     window.clearTimeout(swipeTimer.current);
     swipeTimer.current = window.setTimeout(() => resolveSwipe(i), 150);
-  }, [videoIds.length, onNearEnd, resolveSwipe]);
+  }, [videoIds.length, onNearEnd, resolveSwipe, fs]);
 
   const go = useCallback((delta: number) => {
     const el = boxRef.current;
@@ -621,29 +624,77 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   }, []);
 
   const enterFs = useCallback((landscape: boolean) => {
+    setClean(false);
     setFs(true);
     keepAlive();
-    if (!isDesktop) { try { void invoke("set_orientation", { landscape }); } catch { /* ignore */ } }
-  }, [isDesktop, keepAlive, setFs]);
+    if (!isDesktop) {
+      try { void invoke("set_orientation", { landscape }); } catch { /* ignore */ }
+      if (landscape) {
+        try {
+          (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.("landscape")?.catch(() => {});
+        } catch { /* ignore */ }
+      }
+    }
+  }, [isDesktop, keepAlive, setClean, setFs]);
 
   const exitFs = useCallback(() => {
+    setClean(false);
     setFs(false);
     keepAlive();
-    if (!isDesktop) { try { void invoke("set_orientation", { landscape: false }); } catch { /* ignore */ } }
-  }, [isDesktop, keepAlive, setFs]);
+    if (!isDesktop) {
+      try { void invoke("set_orientation", { landscape: false }); } catch { /* ignore */ }
+      try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
+    }
+  }, [isDesktop, keepAlive, setClean, setFs]);
 
-  /* 系统真旋转了（iOS 原生请求成功后），CSS 就不再转 90° */
+  /* 系统真旋转了（iOS 原生请求成功后），CSS 就不再转 90°；
+     物理横置手机时自动进入全屏，竖回时自动退出全屏（对齐 LNPANDY 版）。 */
   useEffect(() => {
     if (isDesktop) return undefined;
-    const sync = () => setVpLandscape(window.innerWidth > window.innerHeight);
-    sync();
-    window.addEventListener("resize", sync);
-    window.addEventListener("orientationchange", sync);
-    return () => {
-      window.removeEventListener("resize", sync);
-      window.removeEventListener("orientationchange", sync);
+    const onViewportChange = () => {
+      const isLand = window.innerWidth > window.innerHeight;
+      setVpLandscape((prev) => {
+        if (prev !== isLand && active) {
+          setFs(isLand);
+          keepAlive();
+        }
+        return isLand;
+      });
     };
-  }, [isDesktop]);
+    window.addEventListener("resize", onViewportChange);
+    window.addEventListener("orientationchange", onViewportChange);
+    return () => {
+      window.removeEventListener("resize", onViewportChange);
+      window.removeEventListener("orientationchange", onViewportChange);
+    };
+  }, [isDesktop, active, setFs, keepAlive]);
+
+  /* 全屏切换或视口旋转后校准滚动容器 scrollTop：
+     - 进入全屏时非当前项已隐藏，当前项位于顶部 scrollTop = 0；
+     - 退出全屏回到竖屏列表时，立即把 scrollTop 对齐到 index * clientHeight，
+       防止错位到其它视频封面（「横屏播放变成别的剧集」的根因）。 */
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el) return undefined;
+    if (fs) {
+      el.scrollTop = 0;
+      return undefined;
+    }
+    const syncScroll = () => {
+      const box = boxRef.current;
+      if (!box || fs) return;
+      box.scrollTop = index * (box.clientHeight || 1);
+    };
+    syncScroll();
+    const raf = requestAnimationFrame(syncScroll);
+    const t1 = window.setTimeout(syncScroll, 120);
+    const t2 = window.setTimeout(syncScroll, 350);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(t1);
+      window.clearTimeout(t2);
+    };
+  }, [fs, vpLandscape, index]);
 
   useEffect(() => () => {
     for (const t of keepAliveTimers.current) window.clearTimeout(t);
@@ -764,14 +815,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       </div>
 
       <div ref={boxRef} onScroll={onScroll}
-        className="absolute inset-y-0 left-0 overflow-y-scroll no-bar snap-y snap-mandatory overscroll-y-contain"
+        className={`absolute inset-y-0 left-0 no-bar ${fs ? "overflow-hidden" : "overflow-y-scroll snap-y snap-mandatory overscroll-y-contain"}`}
         style={{ right: isDesktop && panel ? 372 : 0, transition: "right .3s cubic-bezier(.2,0,0,1)" }}>
         {videoIds.map((vid, i) => {
           const isActive = i === index;
           return (
             <section key={vid} className="relative w-full h-full snap-start snap-always overflow-hidden">
               {isActive && playUrl ? (
-                <div className="absolute inset-0" style={{ touchAction: swipeEp ? "none" : "pan-y" }}
+                <div className={rotated ? "fs-landscape" : (!isDesktop && fs ? "fs-immersive" : "absolute inset-0")} style={{ touchAction: swipeEp ? "none" : "pan-y" }}
                   onPointerDown={onDown} onPointerMove={onMove} onPointerUp={(e) => onUp(false, e)} onPointerCancel={(e) => onUp(true, e)} onLostPointerCapture={(e) => onUp(true, e)}>
                 <div style={{ position: "absolute", inset: 0, transform: `translate3d(${zoom.x}px, ${zoom.y}px, 0) scale(${zoom.s})`, transformOrigin: "center center", transition: zoom.g ? "none" : "transform .18s ease-out" }}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay active={active} muted={muted}
