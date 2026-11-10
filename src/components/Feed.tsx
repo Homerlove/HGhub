@@ -115,6 +115,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const keepAliveTimers = useRef<number[]>([]);
   /* 双指缩放：scale 1~4，平移跟手指 */
   const [zoom, setZoom] = useState({ s: 1, x: 0, y: 0, g: false });
+  /* 竖屏下看横屏视频：contain = 完整显示，cover = 放大铺满 */
+  const [portraitFit, setPortraitFit] = useState<"contain" | "cover">("contain");
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const pinchRef = useRef<{ d0: number; mx0: number; my0: number; s0: number; x0: number; y0: number } | null>(null);
 
@@ -196,6 +198,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const barProgress = barPct ?? (duration ? time / duration : 0);
   /* 沉浸全屏 + 横屏视频 → 舞台旋转 90°，看起来就是横屏 */
   const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0 && !vpLandscape;
+  const landscapeVideo = vsize.w > 0 && vsize.h > 0 && vsize.w > vsize.h;
 
   /* ── 上下划切集 ──────────────────────────────────────────
    * 「上下划切集」开启时，播放区 overlay 的 touch-action 是 none，
@@ -326,6 +329,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   useEffect(() => {
     setTime(0); setDuration(0); setBuffered(0); setErr(""); setWaiting(true); setPaused(false); setDescOpen(false);
     setVsize({ w: 0, h: 0 });
+    setPortraitFit("contain");
   }, [playKey]);
 
   /* 音量/静音同步 */
@@ -736,7 +740,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay active={active} muted={muted}
                   diagnosticContext={{ active, view: mode, kind, video_id: curId, episode: curEp }}
                   volume={volume} rate={effRate}
-                  fit={isDesktop || (vsize.w > 0 && vsize.w > vsize.h) ? "contain" : "cover"}
+                  fit={isDesktop ? "contain" : landscapeVideo ? (fs || vpLandscape ? "contain" : portraitFit) : (vpLandscape ? "contain" : "cover")}
                   onClick={() => { if (isDesktop) videoRef.current?.toggle(); }}
                   onTime={onTimeTick}
                   onDuration={onDurationTick}
@@ -786,6 +790,32 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   </div>
                 )
               ) : null}
+
+              {/* 竖屏下看横屏视频：快捷「放大铺满 / 完整适应 / 横屏全屏」与缩放复位胶囊 */}
+              {isActive && !fs && !clean && !isDesktop && (landscapeVideo || zoom.s > 1.05) && (
+                <div className="absolute left-1/2 -translate-x-1/2 z-20 flex items-center gap-2" style={{ top: "64%" }}>
+                  {landscapeVideo && (
+                    <>
+                      <button type="button" onClick={() => {
+                        if (zoom.s > 1.05) { setZoom({ s: 1, x: 0, y: 0, g: false }); setPortraitFit("contain"); }
+                        else setPortraitFit((f) => (f === "contain" ? "cover" : "contain"));
+                      }} className="hg-chip-strong backdrop-blur-md px-3 h-7 rounded-full text-[11.5px] font-semibold flex items-center gap-1.5 pressable elev-1">
+                        {zoom.s > 1.05 ? `还原缩放 (${zoom.s.toFixed(1)}x)` : portraitFit === "contain" ? "放大铺满" : "完整适应"}
+                      </button>
+                      <button type="button" onClick={() => enterFs(true)}
+                        className="hg-chip-strong backdrop-blur-md px-3 h-7 rounded-full text-[11.5px] font-semibold flex items-center gap-1 pressable elev-1">
+                        <IExpand size={12} />横屏全屏
+                      </button>
+                    </>
+                  )}
+                  {!landscapeVideo && zoom.s > 1.05 && (
+                    <button type="button" onClick={() => setZoom({ s: 1, x: 0, y: 0, g: false })}
+                      className="hg-chip-strong backdrop-blur-md px-3 h-7 rounded-full text-[11.5px] font-semibold pressable elev-1">
+                      还原缩放 ({zoom.s.toFixed(1)}x)
+                    </button>
+                  )}
+                </div>
+              )}
 
               {/* 右侧操作栏（移动端）：收藏 / 评论 / 全屏 / 分享
                   颜色写死不跟主题走：浅色主题下这些字必须仍是白色 */}
