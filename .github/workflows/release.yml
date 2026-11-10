@@ -369,7 +369,7 @@ jobs:
           cd src-tauri/gen/apple
           xcodebuild -project "${{ steps.proj.outputs.xcodeproj }}" \
             -scheme "${{ steps.proj.outputs.scheme }}" \
-            -configuration Release \
+            -configuration release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/HGhub.xcarchive" \
