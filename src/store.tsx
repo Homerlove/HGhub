@@ -31,7 +31,9 @@ export type Page =
   | { kind: "topics"; key: string }
   | { kind: "topic"; key: string; slug: string; name: string }
   | { kind: "tags"; key: string }
-  | { kind: "tag"; key: string; tag: string; name: string };
+  | { kind: "tag"; key: string; tag: string; name: string }
+  | { kind: "following"; key: string }
+  | { kind: "user"; key: string; id: number; name?: string };
 
 export type PageInput =
   | { kind: "feed"; videoIds: number[]; index: number; title: string; source?: string; feedKind?: "video" | "post"; startEp?: number; startTime?: number }
@@ -43,7 +45,9 @@ export type PageInput =
   | { kind: "topics" }
   | { kind: "topic"; slug: string; name: string }
   | { kind: "tags" }
-  | { kind: "tag"; tag: string; name: string };
+  | { kind: "tag"; tag: string; name: string }
+  | { kind: "following" }
+  | { kind: "user"; id: number; name?: string };
 
 export type Toast = {
   id: number;

@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { tracePlayback } from "./playbackDiagnostics";
 import type {
-  CommentPage, Detail, Paged, PlayInfo, Post, RankItem, TagGroup, TopicCard, TopicDetail, User, VideoCard,
+  CommentPage, Detail, HotWord, Paged, PlayInfo, Post, PostCategory, RankItem, TagGroup, TopicCard, TopicDetail, User, UserProfile, VideoCard,
 } from "./types";
 
 /* ── 运行环境 ───────────────────────────────────────────── */
@@ -60,7 +60,8 @@ const NET_FAIL = /dns|timed? ?out|timeout|connection|refused|reset|unreachable|b
 const READ_ONLY = new Set([
   "api_me", "api_feed", "api_category", "api_rank", "api_search",
   "api_posts", "api_post", "api_post_comments", "api_video", "api_play", "api_comments",
-  "api_topics", "api_topic", "api_tags", "api_tag_videos",
+  "api_topics", "api_topic", "api_tags", "api_tag_videos", "api_search_hot",
+  "api_post_categories", "api_post_category", "api_related", "api_following", "api_user", "api_user_stats", "api_user_videos",
 ]);
 /** 给自动选线用的观察点。api.ts 不反向依赖 autoLine，避免循环 import。 */
 export type NetObserver = (r: { ok: boolean; cmd: string; msg?: string; networkish?: boolean }) => void;
@@ -144,6 +145,7 @@ export const api = {
     call<{ items: VideoCard[]; pagination: Paged<VideoCard>["pagination"]; keyword: string }>(
       "api_search", { q, page, size },
     ),
+  searchHot: () => call<{ items: HotWord[] }>("api_search_hot"),
   posts: (page = 1, size = 20) => call<Paged<Post>>("api_posts", { page, size }),
   post: (id: number) => call<Post & { content?: string; video_url?: string }>("api_post", { id }),
 
@@ -160,6 +162,14 @@ export const api = {
   postLike: (id: number, on: boolean) => invoke<unknown>("api_post_like", { id, on }),
   postCollect: (id: number, on: boolean) => invoke<unknown>("api_post_collect", { id, on }),
   postComments: (id: number, page: number, size: number) => call<CommentPage>("api_post_comments", { id, page, size }),
+  postCategories: () => call<{ items: PostCategory[] }>("api_post_categories"),
+  postCategory: (route: string, page = 1, size = 20) =>
+    call<Paged<Post>>("api_post_category", { route, page, size }),
+  related: (id: number) => call<{ items: VideoCard[] }>("api_related", { id }),
+  following: (page = 1, size = 20) => call<Paged<VideoCard>>("api_following", { page, size }),
+  user: (id: number) => call<UserProfile>("api_user", { id }),
+  userStats: (id: number) => call<{ user_id: number; like_count: number; following: number; followers: number; video_count: number; post_count: number }>("api_user_stats", { id }),
+  userVideos: (id: number, page = 1, size = 20) => call<Paged<VideoCard>>("api_user_videos", { id, page, size }),
   like: (id: number, ep: number, on: boolean) => call<unknown>("api_like", { id, ep, on }),
   collect: (id: number, on: boolean) => call<unknown>("api_collect", { id, on }),
   follow: (uid: number, on: boolean) => call<unknown>("api_follow", { uid, on }),

@@ -566,7 +566,7 @@ pub async fn api_feed(state: State<'_, Api>, page: u32, size: u32) -> Result<Val
 /// 专题列表：`/api/topics` 返回 data.items（标题/封面/简介/收录数）。
 #[tauri::command]
 pub async fn api_topics(state: State<'_, Api>) -> Result<Value, String> {
-    state.get("/api/topics").await
+    state.get("/api/topics?size=100").await
 }
 
 /// 专题详情：`/api/topics/{slug}` 返回 data = { topic, videos, related }。
@@ -630,6 +630,12 @@ pub async fn api_search(
     state
         .get(&format!("/api/search?q={encoded}&page={page}&size={size}"))
         .await
+}
+
+/// 热搜榜：`/api/search/hot` 返回 data.items（word/heat）。
+#[tauri::command]
+pub async fn api_search_hot(state: State<'_, Api>) -> Result<Value, String> {
+    state.get("/api/search/hot").await
 }
 
 #[tauri::command]
@@ -809,6 +815,69 @@ pub async fn api_post_comments(
 ) -> Result<Value, String> {
     state
         .get(&format!("/api/posts/{id}/comments?page={page}&size={size}"))
+        .await
+}
+
+/// 吃瓜分类：`/api/site/categories/post` 返回 data.items（name/route）。
+#[tauri::command]
+pub async fn api_post_categories(state: State<'_, Api>) -> Result<Value, String> {
+    state.get("/api/site/categories/post").await
+}
+
+/// 按分类取吃瓜帖：`/api/posts/category/{route}`。
+#[tauri::command]
+pub async fn api_post_category(
+    state: State<'_, Api>,
+    route: String,
+    page: u32,
+    size: u32,
+) -> Result<Value, String> {
+    let encoded: String = url::form_urlencoded::byte_serialize(route.as_bytes()).collect();
+    state
+        .get(&format!("/api/posts/category/{encoded}?page={page}&size={size}"))
+        .await
+}
+
+/// 相关推荐：`/api/videos/{id}/related` 返回 data.items。
+#[tauri::command]
+pub async fn api_related(state: State<'_, Api>, id: i64) -> Result<Value, String> {
+    state.get(&format!("/api/videos/{id}/related")).await
+}
+
+/// 关注流：`/api/videos/following`（需登录）。
+#[tauri::command]
+pub async fn api_following(
+    state: State<'_, Api>,
+    page: u32,
+    size: u32,
+) -> Result<Value, String> {
+    state
+        .authed("GET", &format!("/api/videos/following?page={page}&size={size}"), None)
+        .await
+}
+
+/// 用户主页：`/api/users/{id}`。
+#[tauri::command]
+pub async fn api_user(state: State<'_, Api>, id: i64) -> Result<Value, String> {
+    state.get(&format!("/api/users/{id}")).await
+}
+
+/// 用户统计：`/api/users/{id}/stats`。
+#[tauri::command]
+pub async fn api_user_stats(state: State<'_, Api>, id: i64) -> Result<Value, String> {
+    state.get(&format!("/api/users/{id}/stats")).await
+}
+
+/// 用户作品：`/api/videos/user/{id}`。
+#[tauri::command]
+pub async fn api_user_videos(
+    state: State<'_, Api>,
+    id: i64,
+    page: u32,
+    size: u32,
+) -> Result<Value, String> {
+    state
+        .get(&format!("/api/videos/user/{id}?page={page}&size={size}"))
         .await
 }
 #[cfg(test)]

@@ -152,6 +152,22 @@ export type TagGroup = {
   tags: TagItem[];
 };
 
+export type HotWord = { heat: number; word: string };
+
+export type PostCategory = { id: number; name: string; route: string; intro?: string; sort?: number };
+
+export type UserProfile = {
+  id: number;
+  username: string;
+  nickname: string;
+  avatar: string;
+  avatar_color?: string;
+  sign?: string;
+  desc?: string;
+  user_type?: string;
+  counts?: Record<string, number>;
+};
+
 export type User = {
   id: number;
   username: string;

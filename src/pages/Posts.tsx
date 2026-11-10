@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api, cover, fmt, isMobile } from "../api";
-import type { Post } from "../types";
+import type { Post, PostCategory } from "../types";
 import { useStore } from "../store";
 import { Empty, Img } from "../components/ui";
 import Player from "../components/Player";
@@ -10,6 +10,8 @@ import { handleArticleClick, sanitizeHtml } from "../html";
 /* ================= 吃瓜列表 ================= */
 export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
   const { push } = useStore();
+  const [cats, setCats] = useState<PostCategory[]>([]);
+  const [cat, setCat] = useState<string>(""); // 空 = 全部
   const [items, setItems] = useState<Post[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
@@ -17,16 +19,22 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
   const busy = useRef(false);
   const sentinel = useRef<HTMLDivElement>(null);
 
-  const loadMore = async () => {
-    if (busy.current || page >= pages) return;
+  useEffect(() => {
+    api.postCategories().then((r) => setCats(r?.items || [])).catch(() => {});
+  }, []);
+
+  const loadMore = async (reset = false) => {
+    if (busy.current) return;
+    const next = reset ? 1 : page + 1;
+    if (!reset && next > pages) return;
     busy.current = true;
     setLoading(true);
     try {
-      const next = page + 1;
-      const res = await api.posts(next, 20);
+      const res = cat ? await api.postCategory(cat, next, 20) : await api.posts(next, 20);
       setItems((prev) => {
-        const seen = new Set(prev.map((x) => x.id));
-        return [...prev, ...(res?.items || []).filter((x) => !seen.has(x.id))];
+        const base = reset ? [] : prev;
+        const seen = new Set(base.map((x) => x.id));
+        return [...base, ...(res?.items || []).filter((x) => !seen.has(x.id))];
       });
       setPage(next);
       setPages(res?.pagination?.pages || next);
@@ -36,7 +44,15 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
     }
   };
 
-  useEffect(() => { loadMore(); /* eslint-disable-next-line */ }, []);
+  const pickCat = (route: string) => {
+    if (route === cat) return;
+    setCat(route);
+    setItems([]);
+    setPage(0);
+    setPages(1);
+  };
+
+  useEffect(() => { loadMore(true); /* eslint-disable-next-line */ }, [cat]);
   useEffect(() => {
     const el = sentinel.current;
     if (!el) return;
@@ -44,7 +60,7 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
     io.observe(el);
     return () => io.disconnect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pages]);
+  }, [page, pages, cat]);
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
@@ -53,6 +69,18 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
         <span className="text-[14px] font-bold text-on">黄果吃瓜</span>
         <span className="text-[10.5px] text-mut ml-1">圈内爆料</span>
       </div>
+      {cats.length > 0 && (
+        <div className="shrink-0 flex gap-2 px-4 py-2.5 overflow-x-auto no-bar">
+          <button onClick={() => pickCat("")}
+            className={`shrink-0 px-4 h-8 rounded-(--r-ctl) text-[12px] font-semibold pressable ${cat === "" ? "tonal text-on-sec" : "bg-s3 text-mut"}`}
+            style={cat === "" ? { background: "var(--p-sec)", color: "var(--p-primary)" } : undefined}>全部</button>
+          {cats.map((c) => (
+            <button key={c.route} onClick={() => pickCat(c.route)}
+              className={`shrink-0 px-4 h-8 rounded-(--r-ctl) text-[12px] font-semibold pressable ${cat === c.route ? "tonal text-on-sec" : "bg-s3 text-mut"}`}
+              style={cat === c.route ? { background: "var(--p-sec)", color: "var(--p-primary)" } : undefined}>{c.name}</button>
+          ))}
+        </div>
+      )}
       <div className="flex-1 scroll-y px-3 pt-3 pb-8">
         {items.length ? (
           <div className={`${wide ? "columns-3 xl:columns-4" : "columns-2"} gap-2`}>

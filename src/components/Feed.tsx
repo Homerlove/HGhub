@@ -8,6 +8,7 @@ import VideoSurface, { type VideoHandle } from "./VideoSurface";
 import PlayerControls from "./PlayerControls";
 import PlaybackLock from "./PlaybackLock";
 import { ArticlePanel, CommentsPanel, EpisodesPanel } from "./Panels";
+import { RowCard } from "./cards";
 import { setBackHandler } from "../back";
 import { tracePlayback } from "../playbackDiagnostics";
 import {
@@ -47,6 +48,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const [playUrls, setPlayUrls] = useState<Record<string, string>>({});
   const [cards, setCards] = useState<Record<number, VideoCard>>({});
   const [posts, setPosts] = useState<Record<number, Post>>({});
+  const [related, setRelated] = useState<VideoCard[]>([]);
 
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -294,6 +296,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kind, index, videoIds]);
+
+  /* 相关推荐：切到当前视频时拉一次 */
+  useEffect(() => {
+    if (!curId || kind !== "video") return;
+    let alive = true;
+    api.related(curId).then((r) => { if (alive) setRelated(r?.items || []); }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curId, kind]);
 
   /* 拉播放地址 */
   useEffect(() => {
@@ -1190,18 +1201,35 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
                     {/* 作者 + 关注 */}
                     <div className="mt-4 flex items-center gap-2.5 rounded-(--r-md) bg-s2 p-2.5">
-                      <Avatar size={34} name={meta.author} hue={220} />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-[12.5px] font-semibold text-on truncate">{meta.author}</div>
-                        <div className="text-[10px] text-mut">作者</div>
-                      </div>
+                      <button
+                        onClick={() => meta.authorId > 0 && store.push({ kind: "user", id: meta.authorId, name: meta.author })}
+                        className="flex items-center gap-2.5 flex-1 min-w-0 text-left pressable"
+                        disabled={meta.authorId <= 0}>
+                        <Avatar size={34} name={meta.author} hue={220} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[12.5px] font-semibold text-on truncate">{meta.author}</div>
+                          <div className="text-[10px] text-mut">作者</div>
+                        </div>
+                      </button>
                       {meta.authorId > 0 && (
                         <button onClick={onFollow}
-                          className={`h-7 px-3 rounded-full text-[11px] font-semibold pressable ${store.follows.includes(meta.authorId) ? "bg-s3 text-mut" : "bg-primary text-on-primary"}`}>
+                          className={`h-7 px-3 rounded-full text-[11px] font-semibold pressable shrink-0 ${store.follows.includes(meta.authorId) ? "bg-s3 text-mut" : "bg-primary text-on-primary"}`}>
                           {store.follows.includes(meta.authorId) ? "已关注" : "+ 关注"}
                         </button>
                       )}
                     </div>
+
+                    {/* 相关推荐 */}
+                    {related.length > 0 && (
+                      <div className="mt-4">
+                        <div className="text-[11px] font-semibold text-dim mb-2">相关推荐</div>
+                        <div className="scroll-x flex gap-2.5 snap-x">
+                          {related.slice(0, 12).map((v) => (
+                            <RowCard key={v.id} v={v} onOpen={() => store.push({ kind: "feed", videoIds: related.map((x) => x.id), index: related.findIndex((x) => x.id === v.id), title: "相关推荐" })} />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* 简介 */}
                     <div className="mt-4">
