@@ -301,6 +301,27 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curId, curEp]);
 
+  /* 剧集预热：相邻集提前取好播放地址，切集秒开 */
+  useEffect(() => {
+    if (!curId || kind !== "video") return;
+    const ep = epMap[curId] || 1;
+    const total = episodes.length;
+    const want: number[] = [];
+    if (ep > 1) want.push(ep - 1);
+    if (total === 0 || ep < total) want.push(ep + 1);
+    for (const e of want) {
+      const k = `${curId}:${e}`;
+      if (playUrls[k]) continue;
+      api.play(curId, e)
+        .then((info) => {
+          const u = info?.streams?.main || info?.video_url;
+          if (u) setPlayUrls((m) => ({ ...m, [k]: u }));
+        })
+        .catch(() => { /* 预热失败不影响当前播放 */ });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [curId, curEp, episodes.length]);
+
   /* 切换条目/集数时重置播放状态 */
   useEffect(() => {
     setTime(0); setDuration(0); setBuffered(0); setErr(""); setWaiting(true); setPaused(false); setDescOpen(false);

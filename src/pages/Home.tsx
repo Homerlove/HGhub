@@ -21,7 +21,7 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
     setLoading(true);
     setError("");
     try {
-      const res = await api.feed(p, 10);
+      const res = await api.feed(p, 30);
       const list = res?.items || [];
       setItems((prev) => {
         const seen = new Set(prev.map((x) => x.id));
