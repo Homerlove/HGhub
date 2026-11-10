@@ -19,47 +19,73 @@ import ResizeHandles from "./components/ResizeHandles";
 import { tracePlayback } from "./playbackDiagnostics";
 import { IGrid, IGridF, IHome, IHomeF, ISearch, IUser, IUserF, Logo } from "./icons";
 
-/* ============ 底部标签栏（Android）—— 细瘦纯文字、低侵入 ============ */
+/* ============ 底部标签栏（移动端）—— iOS 26 液态玻璃悬浮胶囊 ============ */
+/* 设计对齐 liuran001/WeChat-LiquidGlass（iOS 26 风格）：
+   - 不贴边的悬浮胶囊玻璃条，内容透出真实折射感（backdrop blur + 高光内描边）
+   - 选中项是一枚「液滴」玻璃胶囊，用弹簧物理滑动跟随（无 JS 逐帧驱动，
+     用 CSS transition + cubic-bezier 近似 WeChat-LiquidGlass 的 DampedDragAnimation）
+   - 按压时液滴放大（对齐其 press scale 1.1x），图标带充色 */
 function TabBar() {
   const { tab, setTab, theme } = useStore();
-  const items: { k: Tab; label: string }[] = [
-    { k: "home", label: "首页" },
-    { k: "search", label: "搜索" },
-    { k: "category", label: "分类" },
-    { k: "profile", label: "我的" },
+  const items: { k: Tab; label: string; On: (p: { size?: number; className?: string; style?: React.CSSProperties; strokeWidth?: number }) => React.JSX.Element; Off: (p: { size?: number; className?: string; style?: React.CSSProperties; strokeWidth?: number }) => React.JSX.Element }[] = [
+    { k: "home", label: "首页", On: IHomeF, Off: IHome },
+    { k: "search", label: "搜索", On: ISearch, Off: ISearch },
+    { k: "category", label: "分类", On: IGridF, Off: IGrid },
+    { k: "profile", label: "我的", On: IUserF, Off: IUser },
   ];
-  /* 细瘦纯文字分栏：只有选中项高亮，没有指示点。
-     首页是沉浸视频 → 底栏压深色；搜索/分类/我的 是浅色内容页 →
-     浅色主题下底栏跟着换成浅色，深色主题保持深色。 */
+  const idx = items.findIndex((i) => i.k === tab);
   const overVideo = tab === "home";
-  const lightBar = !overVideo && theme === "light";
+  const light = !overVideo && theme === "light";
+  /* 液滴定位：4 等分槽位，百分比偏移，宽度 = 1/4 减去内边距 */
+  const dropLeft = `calc(4px + (100% - 8px - 56px) * ${idx / 4})`;
   return (
-    <nav className="hg-tabbar absolute bottom-0 inset-x-0 z-30"
-      style={{
-        paddingBottom: "var(--sab, 0px)",
-        background: lightBar ? "rgba(250, 250, 250, .66)" : "rgba(17, 17, 17, .58)",
-        borderTop: lightBar ? "1px solid rgba(255,255,255,.65)" : "1px solid rgba(255,255,255,.10)",
-        boxShadow: lightBar ? "0 -6px 24px rgba(0,0,0,.06)" : "0 -6px 24px rgba(0,0,0,.25)",
-        backdropFilter: "blur(28px) saturate(185%)",
-        WebkitBackdropFilter: "blur(28px) saturate(185%)",
+    <nav className="hg-tabbar absolute inset-x-0 bottom-0 z-30 flex justify-center"
+      style={{ paddingBottom: "calc(var(--sab, 0px) * 0.55)" }} aria-label="主导航">
+      <div className="hg-glass relative" style={{
+        width: "min(92vw, 420px)",
+        height: 56,
+        borderRadius: 28,
+        background: light ? "rgba(250, 250, 250, .62)" : "rgba(22, 22, 24, .55)",
+        boxShadow: light
+          ? "0 8px 32px rgba(0,0,0,.12), 0 1px 0 rgba(255,255,255,.85) inset, 0 0 0 .5px rgba(0,0,0,.06)"
+          : "0 8px 32px rgba(0,0,0,.38), 0 1px 0 rgba(255,255,255,.16) inset, 0 0 0 .5px rgba(255,255,255,.10)",
+        backdropFilter: "blur(24px) saturate(180%)",
+        WebkitBackdropFilter: "blur(24px) saturate(180%)",
       }}>
-      <div className="h-[40px] flex items-center px-1">
-        {items.map(({ k, label }) => {
-          const on = tab === k;
-          return (
-            <button key={k} onClick={() => setTab(k)} className="flex-1 h-full flex items-center justify-center pressable">
-              <span className="text-[12.5px] leading-none transition-colors duration-200"
-                style={{
-                  fontWeight: on ? 700 : 400,
-                  color: lightBar
-                    ? (on ? "var(--p-primary)" : "rgba(0,0,0,.45)")
-                    : (on ? "#ffffff" : "rgba(255,255,255,.6)"),
-                }}>
-                {label}
-              </span>
-            </button>
-          );
-        })}
+        {/* 液滴：跟随选中项的玻璃胶囊 */}
+        <div className="hg-drop absolute top-[4px] bottom-[4px] w-[56px]" style={{
+          left: dropLeft,
+          borderRadius: 24,
+          transition: "left 480ms cubic-bezier(.32,1.35,.45,1)",
+          background: light ? "rgba(255,255,255,.92)" : "rgba(255,255,255,.14)",
+          boxShadow: light
+            ? "0 2px 10px rgba(0,0,0,.10), 0 0 0 .5px rgba(0,0,0,.05)"
+            : "0 1px 8px rgba(255,255,255,.08) inset, 0 0 0 .5px rgba(255,255,255,.22)",
+          backdropFilter: "blur(10px) brightness(1.12)",
+          WebkitBackdropFilter: "blur(10px) brightness(1.12)",
+        }} />
+        <div className="relative h-full grid grid-cols-4">
+          {items.map(({ k, label, On, Off }) => {
+            const on = tab === k;
+            const Icon = on ? On : Off;
+            return (
+              <button key={k} onClick={() => setTab(k)}
+                className="relative flex flex-col items-center justify-center gap-[2px] pressable"
+                aria-current={on ? "page" : undefined}>
+                <Icon size={21} style={{
+                  color: on ? "var(--p-primary)" : (light ? "rgba(0,0,0,.42)" : "rgba(255,255,255,.62)"),
+                  transition: "color 200ms, transform 320ms cubic-bezier(.32,1.35,.45,1)",
+                  transform: on ? "scale(1.08) translateY(-1px)" : "scale(1)",
+                }} />
+                <span className="text-[9.5px] leading-none" style={{
+                  fontWeight: on ? 700 : 500,
+                  color: on ? "var(--p-primary)" : (light ? "rgba(0,0,0,.42)" : "rgba(255,255,255,.62)"),
+                  transition: "color 200ms",
+                }}>{label}</span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </nav>
   );
@@ -127,7 +153,7 @@ function AppBody() {
 
   const vis = (k: Tab) => (tab === k ? "absolute inset-0" : "absolute inset-0 invisible pointer-events-none");
   const pageActive = stack.length === 0 && !loginOpen;
-  const bottomInset = isMobile ? (fs || clean ? 0 : 40) : 14;
+  const bottomInset = isMobile ? (fs || clean ? 0 : 74) : 14;
   /* 栈页（从搜索/分类/我的进入的播放页、图文页）没有底栏，
      底部只让出安全区。之前多留了 20px，视频底边会露出一条
      「底栏」似的窄缝（底部的压暗渐变到不了屏幕最底）。 */
