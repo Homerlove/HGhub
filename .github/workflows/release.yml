@@ -350,6 +350,12 @@ jobs:
       - name: 生成 iOS 工程
         run: pnpm tauri ios init --ci
 
+      - name: 替换 Rust 构建脚本
+        run: python3 scripts/patch-ios-pbxproj.py
+
+      - name: 前端构建
+        run: pnpm build && node scripts/sync-android-icons.mjs
+
       - name: 认工程名和 scheme
         id: proj
         shell: bash
@@ -362,22 +368,10 @@ jobs:
           echo "scheme=$S" >> "$GITHUB_OUTPUT"
           echo "project=$P scheme=$S"
 
-      - name: 准备 dev 地址文件 + 打印 CLI 选项
-        shell: bash
-        continue-on-error: true
-        run: |
-          printf '127.0.0.1:1420' > "${TMPDIR%/}/com.hghub.huangguo-server-addr"
-          ls -l "${TMPDIR%/}/com.hghub.huangguo-server-addr"
-          pnpm tauri ios build --help 2>&1 | head -40 || true
-
       - name: 构建（无签名 archive）
         shell: bash
-        env:
-          TMPDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
-          printf '127.0.0.1:1420' > "$TMPDIR/com.hghub.huangguo-server-addr"
-          ls -l "$TMPDIR/com.hghub.huangguo-server-addr"
           cd src-tauri/gen/apple
           xcodebuild -project "${{ steps.proj.outputs.xcodeproj }}" \
             -scheme "${{ steps.proj.outputs.scheme }}" \
