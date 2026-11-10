@@ -12,7 +12,7 @@ on:
         description: "构建范围：check 只查编译不出包；all 四平台；选单个只出那一个"
         type: choice
         default: all
-        options: [all, android-arm64, android, linux, windows, macos, check]
+        options: [all, android-arm64, android, linux, windows, macos, ios, check]
       quick:
         description: "quick 编译：thin LTO + 4 个 codegen 单元，快一倍，体积大几 MB"
         type: boolean
@@ -294,6 +294,98 @@ jobs:
           path: artifacts/*
           if-no-files-found: error
 
+  ios:
+    name: iOS (unsigned ipa)
+    runs-on: macos-latest
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platforms == 'all' || inputs.platforms == 'ios' }}
+    env:
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.quick && 'thin' || 'true' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.quick && '4' || '1' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 版本号对齐 tag
+        id: ver
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+          elif [[ -n "${{ inputs.tag }}" ]]; then
+            V="${{ inputs.tag }}"
+            V="${V#v}"
+          else
+            V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          fi
+          node scripts/set-version.mjs "$V"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "versionName=$V"
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+      - uses: swatinem/rust-cache@v2.9.3
+        with:
+          workspaces: src-tauri -> target
+          key: ios
+      - run: pnpm install --frozen-lockfile
+
+      - name: 生成 iOS 工程
+        run: pnpm tauri ios init --ci
+
+      - name: 认工程名和 scheme
+        id: proj
+        shell: bash
+        run: |
+          ls -la src-tauri/gen/apple
+          cd src-tauri/gen/apple
+          P="$(ls -d *.xcodeproj | head -1)"
+          S="$(xcodebuild -list -project "$P" 2>/dev/null | awk '/Schemes:/{f=1;next} f&&NF{print $1;exit}')"
+          echo "xcodeproj=$P" >> "$GITHUB_OUTPUT"
+          echo "scheme=$S" >> "$GITHUB_OUTPUT"
+          echo "project=$P scheme=$S"
+
+      - name: 构建（无签名 archive）
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd src-tauri/gen/apple
+          xcodebuild -project "${{ steps.proj.outputs.xcodeproj }}" \
+            -scheme "${{ steps.proj.outputs.scheme }}" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/HGhub.xcarchive" \
+            archive \
+            CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | tail -50
+
+      - name: 打包 ipa
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_DIR="$RUNNER_TEMP/HGhub.xcarchive/Products/Applications"
+          ls -la "$APP_DIR"
+          APP="$(ls -d "$APP_DIR"/*.app | head -1)"
+          mkdir -p artifacts "$RUNNER_TEMP/Payload"
+          cp -R "$APP" "$RUNNER_TEMP/Payload/"
+          cd "$RUNNER_TEMP"
+          /usr/bin/zip -qry "$GITHUB_WORKSPACE/artifacts/HGhub_${{ steps.ver.outputs.version }}_ios.ipa" Payload
+          cd "$GITHUB_WORKSPACE"
+          unzip -l "artifacts/HGhub_${{ steps.ver.outputs.version }}_ios.ipa" | head -8
+          ls -lh artifacts
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ios
+          path: artifacts/*
+          if-no-files-found: error
+
   # ================= Linux：deb =================
   linux:
     name: Linux (deb)
@@ -414,7 +506,7 @@ jobs:
   # ================= 发布 =================
   release:
     name: Publish GitHub Release
-    needs: [windows, android, macos, linux]
+    needs: [windows, android, macos, linux, ios]
     if: >-
       startsWith(github.ref, 'refs/tags/v') ||
       (github.event_name == 'workflow_dispatch' && inputs.tag != '')
