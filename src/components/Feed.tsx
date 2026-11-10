@@ -37,7 +37,7 @@ const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, "
 
 export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd, startEp, startTime }: Props) {
   const store = useStore();
-  const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, swipeEp, setSwipeEp } = store;
+  const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen, swipeEp, setSwipeEp, preferHevc, setPreferHevc } = store;
   const isDesktop = !isMobile;
 
   const boxRef = useRef<HTMLDivElement>(null);
@@ -46,6 +46,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const [epMap, setEpMap] = useState<Record<number, number>>(() => (startEp ? { [videoIds[startIndex]]: startEp } : {}));
   const [details, setDetails] = useState<Record<number, Detail>>({});
   const [playUrls, setPlayUrls] = useState<Record<string, string>>({});
+  const [hevcUrls, setHevcUrls] = useState<Record<string, string>>({});
   const [cards, setCards] = useState<Record<number, VideoCard>>({});
   const [posts, setPosts] = useState<Record<number, Post>>({});
   const [related, setRelated] = useState<VideoCard[]>([]);
@@ -128,7 +129,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const detail = details[curId];
   const curEp = epMap[curId] || 1;
   const playKey = `${curId}:${curEp}`;
-  const playUrl = playUrls[playKey] || "";
+  const mainUrl = playUrls[playKey] || "";
+  const hevcUrl = hevcUrls[playKey] || "";
+  const playUrl = preferHevc && hevcUrl ? hevcUrl : mainUrl;
   useEffect(() => { setZoom({ s: 1, x: 0, y: 0, g: false }); pinchRef.current = null; pointersRef.current.clear(); }, [playUrl]);
   useEffect(() => { videoRef.current?.trace("page.active", { active, view: mode, video_id: curId, episode: curEp }); }, [active, mode, curId, curEp]);
   const episodes = detail?.episodes || [];
@@ -318,6 +321,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       .then((info) => {
         if (!alive) return;
         const streamUrl = info?.streams?.main || info?.video_url;
+        const hevcStream = info?.streams?.hevc || info?.video_url_hevc || "";
         // 接口本身成功但业务失败（status=0 / streams 为空）时不会进 call() 的 catch，
         // 这里把原始 status/msg 落进 debug.log ——「暂无播放地址」的唯一现场证据。
         // src 才是真正喂给播放器的值；video_url 是新接口不再返回的旧字段，别拿它判断成败。
@@ -337,6 +341,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         });
         if (!streamUrl) throw new Error("暂无播放地址");
         setPlayUrls((m) => ({ ...m, [playKey]: streamUrl }));
+        if (hevcStream) setHevcUrls((m) => ({ ...m, [playKey]: hevcStream }));
         addHistory(curId, curEp);
       })
       .catch((e) => { if (alive) setErr((e as Error).message || "取播放地址失败"); });
@@ -358,7 +363,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       api.play(curId, e)
         .then((info) => {
           const u = info?.streams?.main || info?.video_url;
+          const h = info?.streams?.hevc || info?.video_url_hevc || "";
           if (u) setPlayUrls((m) => ({ ...m, [k]: u }));
+          if (h) setHevcUrls((m) => ({ ...m, [k]: h }));
         })
         .catch(() => { /* 预热失败不影响当前播放 */ });
     }
@@ -837,7 +844,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onPause={() => setPaused(true)}
                   onWaiting={() => setWaiting(true)}
                   onEnded={() => { const next = episodes.find((e) => e.ep_num === curEp + 1); if (next) pickEp(next.ep_num); }}
-                  onError={(m) => setErr(m)} />
+                  onError={(m) => {
+                    setErr(m);
+                    if (preferHevc && hevcUrl) {
+                      setPreferHevc(false);
+                      toast("高清播不了，已切回标准", "info");
+                    }
+                  }} />
                 </div>
                 </div>
               ) : (
