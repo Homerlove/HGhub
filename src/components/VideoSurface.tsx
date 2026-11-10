@@ -56,6 +56,13 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
   const { trace, requestSeek } = usePlayerDiagnostics(videoRef, hlsRef, { ...diagnosticContext, active, resource: mediaResource(src) });
   const activity = usePlaybackActivity(videoRef, hlsRef, { active, autoPlay, src, trace });
 
+  const reportSize = (v: HTMLVideoElement | null) => {
+    if (!v) return;
+    const w = v.videoWidth || 0;
+    const h = v.videoHeight || 0;
+    if (w > 0 && h > 0) onSize?.(w, h);
+  };
+
   useImperativeHandle(ref, () => ({
     el: () => videoRef.current,
     play: () => activity.play("handle"),
@@ -91,6 +98,8 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
     setReady(false);
     nearEndFiredRef.current = false;
     recoverCountRef.current = 0;
+    const onVideoResize = () => reportSize(video);
+    video.addEventListener("resize", onVideoResize);
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
     const proxied = isLocalMedia(src);
@@ -175,6 +184,7 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
     }
 
     return () => {
+      video.removeEventListener("resize", onVideoResize);
       if (recoverTimerRef.current) { window.clearTimeout(recoverTimerRef.current); recoverTimerRef.current = null; }
       trace("source.cleanup");
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
@@ -214,9 +224,15 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
       onClick={onClick}
       className={`w-full h-full bg-black ${fit === "cover" ? "object-cover" : "object-contain"} ${className}`}
       style={{ opacity: ready ? 1 : 0, transition: "opacity .35s" }}
-      onLoadedData={(e) => { setReady(true); reapply(e.target as HTMLVideoElement); }}
+      onLoadedData={(e) => {
+        const v = e.target as HTMLVideoElement;
+        setReady(true);
+        reapply(v);
+        reportSize(v);
+      }}
       onTimeUpdate={(e) => {
         const v = e.target as HTMLVideoElement;
+        reportSize(v);
         onTime?.(v.currentTime);
         // iOS 有时不触发 ended：靠近片尾自己补一次，保证自动连播
         const d = v.duration;
@@ -229,12 +245,15 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
         const v = e.target as HTMLVideoElement;
         reapply(v);
         onDuration?.(v.duration || 0);
-        onSize?.(v.videoWidth || 0, v.videoHeight || 0);
+        reportSize(v);
       }}
       onPlay={() => { if (activity.isActive()) onPlaying?.(); }}
       onPause={() => onPause?.()}
       onWaiting={() => onWaiting?.()}
-      onPlaying={() => { if (activity.isActive()) onPlaying?.(); }}
+      onPlaying={(e) => {
+        reportSize(e.target as HTMLVideoElement);
+        if (activity.isActive()) onPlaying?.();
+      }}
       onEnded={() => { if (activity.isActive()) onEnded?.(); }}
       onError={handleVideoError}
     />

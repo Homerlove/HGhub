@@ -1,4 +1,6 @@
 mod api;
+#[cfg(target_os = "ios")]
+mod ios_layout;
 mod lines;
 #[cfg(target_os = "linux")]
 mod linux_http;
@@ -54,6 +56,24 @@ pub fn run() {
                 .build(),
         )
         .manage(Api::new())
+        .on_page_load(|webview, payload| {
+            #[cfg(target_os = "ios")]
+            {
+                let finished = payload.event() == tauri::webview::PageLoadEvent::Finished;
+                ios_layout::apply(webview, finished);
+                if finished {
+                    let wv = (*webview).clone();
+                    tauri::async_runtime::spawn(async move {
+                        for delay_ms in [80_u64, 350] {
+                            tokio::time::sleep(std::time::Duration::from_millis(delay_ms)).await;
+                            ios_layout::apply(&wv, true);
+                        }
+                    });
+                }
+            }
+            #[cfg(not(target_os = "ios"))]
+            let _ = (webview, payload);
+        })
         .setup(|app| {
             if let Ok(dir) = app.path().app_data_dir() {
                 let _ = std::fs::create_dir_all(&dir);

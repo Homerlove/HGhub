@@ -8,6 +8,7 @@ import { initPlaybackLog, installPlaybackPageEvents, tracePlayback } from "./pla
 import { initAutoLine } from "./autoLine";
 import { APP_VERSION, LOCAL, logLine, platform, webviewVersion } from "./api";
 import Hls from "hls.js";
+import { installLayoutDiagnostics } from "./layoutDiagnostics";
 installPlaybackPageEvents();
 void initPlaybackLog();
 /* 自动选线：启动时比一次 com / ai，之后跟着网络变化复查 */
@@ -51,3 +52,4 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     </AppProvider>
   </React.StrictMode>,
 );
+installLayoutDiagnostics();
