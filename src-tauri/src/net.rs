@@ -318,6 +318,7 @@ pub fn err_text(e: &reqwest::Error) -> String {
     out
 }
 
+#[cfg(test)]
 fn dns_summary(addrs: impl IntoIterator<Item = SocketAddr>) -> Value {
     let mut ips: Vec<_> = addrs.into_iter().map(|addr| addr.ip()).collect();
     ips.sort_unstable();
@@ -335,7 +336,220 @@ fn dns_summary(addrs: impl IntoIterator<Item = SocketAddr>) -> Value {
     json!({ "count": ips.len(), "has_fake_ip": has_fake_ip })
 }
 
-/// 网络自检：DNS / HTTP / 代理相关环境变量，用于远程定位「打不开」。
+/// IPv4 地址分类。诊断要能回答「解析到的是正常公网，还是被投毒/被接管」。
+fn ipv4_kind(o: [u8; 4]) -> &'static str {
+    let v4 = std::net::Ipv4Addr::from(o);
+    if v4.is_loopback() {
+        "loopback"
+    } else if o == [0, 0, 0, 0] {
+        "unspecified"
+    } else if o[0] == 198 && (o[1] == 18 || o[1] == 19) {
+        // Clash / Surge 系 TUN 的 fake-ip 网段：TUN 一关这个地址就不可路由。
+        "fake_ip"
+    } else if v4.is_private() {
+        "private"
+    } else if v4.is_link_local() {
+        "link_local"
+    } else if v4.is_broadcast() {
+        "broadcast"
+    } else {
+        "public"
+    }
+}
+
+fn ip_kind(ip: std::net::IpAddr) -> &'static str {
+    match ip {
+        std::net::IpAddr::V4(v4) => ipv4_kind(v4.octets()),
+        std::net::IpAddr::V6(v6) => {
+            if v6.is_loopback() {
+                "loopback"
+            } else if v6.is_unspecified() {
+                "unspecified"
+            } else if let Some(v4) = v6.to_ipv4_mapped() {
+                ipv4_kind(v4.octets())
+            } else {
+                "public"
+            }
+        }
+    }
+}
+
+/// DNS 报告：数量 / 耗时 / 地址种类 / 是否 fake-ip。
+///
+/// **只把可疑地址原样列出**（回环、内网、保留段、fake-ip），公网答案只给数量——
+/// 贴到公开 issue 里也不必泄露完整解析结果，但「被投毒到 127.0.0.1」这类
+/// 一眼就能看见。
+fn dns_report(addrs: &[SocketAddr], ms: u128) -> Value {
+    let mut ips: Vec<std::net::IpAddr> = addrs.iter().map(|a| a.ip()).collect();
+    ips.sort_unstable();
+    ips.dedup();
+    let mut kinds: Vec<&str> = ips.iter().map(|ip| ip_kind(*ip)).collect();
+    kinds.sort_unstable();
+    kinds.dedup();
+    let suspicious: Vec<String> = ips
+        .iter()
+        .filter(|ip| ip_kind(**ip) != "public")
+        .map(|ip| ip.to_string())
+        .collect();
+    json!({
+        "ms": ms as u64,
+        "count": ips.len(),
+        "has_fake_ip": kinds.contains(&"fake_ip"),
+        "kinds": kinds,
+        "suspicious": suspicious,
+    })
+}
+
+/// 拿到解析结果后直连一次，用来区分「DNS 能解析但 SYN 被黑洞」和「HTTP 层出错」。
+async fn tcp_probe(addr: Option<SocketAddr>, timeout: Duration) -> Value {
+    let Some(addr) = addr else {
+        return json!({ "skipped": true, "reason": "没有可用的解析结果" });
+    };
+    let started = Instant::now();
+    match tokio::time::timeout(timeout, tokio::net::TcpStream::connect(addr)).await {
+        Ok(Ok(_)) => json!({
+            "addr": addr.to_string(),
+            "ok": true,
+            "ms": started.elapsed().as_millis() as u64,
+        }),
+        Ok(Err(e)) => json!({
+            "addr": addr.to_string(),
+            "ok": false,
+            "ms": started.elapsed().as_millis() as u64,
+            "error": e.to_string(),
+        }),
+        Err(_) => json!({
+            "addr": addr.to_string(),
+            "ok": false,
+            "timeout": true,
+            "ms": timeout.as_millis() as u64,
+            "error": "连接超时（SYN 无响应）",
+        }),
+    }
+}
+
+/// 把三组探测结果压成一句人话结论 + 可执行的建议，issue 里一眼能看懂。
+fn verdict(dns: &Value, tcp: &Value, http: &Value) -> (&'static str, String, Vec<String>) {
+    let dns_err = dns.get("error").and_then(|v| v.as_str());
+    let fake = dns.get("has_fake_ip").and_then(|v| v.as_bool()).unwrap_or(false);
+    let kinds = dns.get("kinds").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let suspicious = dns.get("suspicious").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    let status = http.get("status").and_then(|v| v.as_u64());
+    let http_err = http.get("error").and_then(|v| v.as_str()).unwrap_or("");
+    let tcp_ok = tcp.get("ok").and_then(|v| v.as_bool());
+
+    // 系统 resolver 报错、但真实请求能通：诊断别把人带偏。
+    if dns_err.is_some() && status.is_some() {
+        return (
+            "dns_false_alarm",
+            "DNS 探测自身失败，但 HTTP 实际可以连通（系统 resolver 异常或被代理接管），不影响使用".into(),
+            vec![],
+        );
+    }
+    if let Some(e) = dns_err {
+        return (
+            "dns_fail",
+            format!("域名解析失败：{e}"),
+            vec![
+                "关掉代理 / 加速器 / VPN 的 TUN 模式后重试（最常见的元凶）".into(),
+                "换网络对比：Wi-Fi 与流量互切".into(),
+                "安卓「私有 DNS」改为自动，或填 223.5.5.5 / 1.1.1.1".into(),
+            ],
+        );
+    }
+    if fake {
+        // 代理正常工作时 HTTP 也是通的，这种情况不能报故障，否则每个开 Clash 的用户都会被吓一跳。
+        let http_ok = status.is_some_and(|c| (200..400).contains(&c));
+        if http_ok {
+            return (
+                "ok_proxy",
+                "DNS 被代理/TUN 接管（fake-ip），但连接正常，可继续使用".into(),
+                vec!["若要排查网络问题，请先退出代理再诊断一次".into()],
+            );
+        }
+        return (
+            "fake_ip",
+            format!(
+                "解析到 fake-ip（{}），DNS 流量被代理/TUN 接管；代理一断开这个地址不可路由",
+                suspicious
+                    .first()
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("198.18.x.x")
+            ),
+            vec![
+                "关掉 Clash / Surge 等代理的 TUN（增强）模式，或直接退出代理".into(),
+                "若必须用代理，请保证代理常驻且节点稳定后再开 App".into(),
+            ],
+        );
+    }
+    if kinds
+        .iter()
+        .any(|k| matches!(k.as_str(), Some("loopback" | "unspecified" | "private")))
+    {
+        return (
+            "dns_hijack",
+            "解析结果落在回环 / 内网 / 保留地址，DNS 被劫持或线路被污染".into(),
+            vec![
+                "换一个 DNS（223.5.5.5、1.1.1.1）后重启 App".into(),
+                "关闭省电模式或系统的「网络加速」类功能".into(),
+            ],
+        );
+    }
+    if tcp_ok == Some(false) {
+        let timeout = tcp.get("timeout").and_then(|v| v.as_bool()).unwrap_or(false);
+        return (
+            if timeout { "tcp_timeout" } else { "tcp_refused" },
+            if timeout {
+                "DNS 正常，但 TCP 连接无响应（SYN 被丢弃）：运营商或防火墙阻断".to_string()
+            } else {
+                format!(
+                    "DNS 正常，但 TCP 连接被拒绝：{}",
+                    tcp.get("error").and_then(|v| v.as_str()).unwrap_or("未知原因")
+                )
+            },
+            vec![
+                "换网络（尤其换运营商 / 关掉网络加速器）后重试".into(),
+                "确认没有防火墙或家长控制拦截该域名".into(),
+            ],
+        );
+    }
+    if !http_err.is_empty() {
+        let lower = http_err.to_lowercase();
+        let tls = lower.contains("certificate")
+            || lower.contains("tls")
+            || lower.contains("ssl")
+            || lower.contains("handshake");
+        return (
+            if tls { "tls_intercept" } else { "http_fail" },
+            if tls {
+                "TLS 握手/证书校验失败：多半是代理做了中间人，或系统时间不对".to_string()
+            } else {
+                format!("HTTP 请求失败：{http_err}")
+            },
+            vec![
+                "关闭代理的「HTTPS 解密 / 中间人」功能".into(),
+                "检查系统时间是否准确".into(),
+            ],
+        );
+    }
+    match status {
+        Some(code) if (200..400).contains(&code) => (
+            "ok",
+            format!("连通正常（HTTP {code}），线路可用"),
+            vec![],
+        ),
+        Some(code) => (
+            "http_status",
+            format!("域名与网络都通，但服务端返回 HTTP {code}"),
+            vec!["稍后重试，或换一条线路".into()],
+        ),
+        None => ("unknown", "诊断信息不足".into(), vec![]),
+    }
+}
+
+/// 网络自检：DNS / TCP / HTTP / 代理环境变量，用于远程定位「打不开」。
+///
+/// 结论直接给在 `verdict` / `summary` / `advice` 里，用户复制出去就能看懂。
 pub async fn diagnose() -> Value {
     let cur = base();
     let host = url::Url::parse(&cur)
@@ -343,19 +557,40 @@ pub async fn diagnose() -> Value {
         .and_then(|u| u.host_str().map(|h| h.to_string()))
         .unwrap_or_default();
 
-    // fake-ip（198.18.0.0/15）说明 DNS 被 TUN 接管：关掉 TUN 后这个地址根本不可路由。
-    let dns = {
-        let host = host.clone();
-        tokio::task::spawn_blocking(move || {
-            use std::net::ToSocketAddrs;
-            match (host.as_str(), 443u16).to_socket_addrs() {
-                Ok(iter) => dns_summary(iter),
-                Err(_) => json!({ "error": "DNS 解析失败" }),
-            }
-        })
+    // DNS：必须和真实请求走同一条解析路径（tokio lookup_host），
+    // 否则会出现「诊断报解析失败、实际却打得开」的假阴性。
+    let dns_started = Instant::now();
+    let mut first_addr: Option<SocketAddr> = None;
+    let dns = if host.is_empty() {
+        json!({ "error": "当前线路没有主机名" })
+    } else {
+        match tokio::time::timeout(
+            Duration::from_secs(6),
+            tokio::net::lookup_host((host.as_str(), 443u16)),
+        )
         .await
-        .unwrap_or(Value::Null)
+        {
+            Ok(Ok(iter)) => {
+                let addrs: Vec<SocketAddr> = iter.collect();
+                let ms = dns_started.elapsed().as_millis();
+                first_addr = addrs.first().copied();
+                dns_report(&addrs, ms)
+            }
+            Ok(Err(e)) => json!({
+                "error": "DNS 解析失败",
+                "detail": e.to_string(),
+                "ms": dns_started.elapsed().as_millis() as u64,
+            }),
+            Err(_) => json!({
+                "error": "DNS 解析超时",
+                "timeout": true,
+                "ms": 6000,
+            }),
+        }
     };
+
+    // TCP：拿到地址就直连一次，把「DNS 通但连不上」和「HTTP 层出错」分开。
+    let tcp = tcp_probe(first_addr, Duration::from_secs(5)).await;
 
     let started = Instant::now();
     let http = match get(&format!("{cur}/"), Duration::from_secs(20), None, None).await {
@@ -364,15 +599,22 @@ pub async fn diagnose() -> Value {
             "ms": started.elapsed().as_millis() as u64,
         }),
         Err(e) => json!({
+            "kind": crate::playback_log::error_kind(&e),
             "error": e,
             "ms": started.elapsed().as_millis() as u64,
         }),
     };
 
+    let (code, summary, advice) = verdict(&dns, &tcp, &http);
+
     json!({
+        "verdict": code,
+        "summary": summary,
+        "advice": advice,
         "base": cur,
         "host": host,
         "dns": dns,
+        "tcp": tcp,
         "http": http,
         "env": {
             "HTTP_PROXY": std::env::var("HTTP_PROXY").ok().map(|p| redact_proxy(&p)),
@@ -380,6 +622,11 @@ pub async fn diagnose() -> Value {
             "ALL_PROXY": std::env::var("ALL_PROXY").ok().map(|p| redact_proxy(&p)),
             "NO_PROXY": std::env::var("NO_PROXY").ok().map(|_| "[已配置，列表已隐藏]"),
             "HGHUB_PROXY": proxy_override().map(|p| redact_proxy(&p)),
+        },
+        "runtime": {
+            "os": std::env::consts::OS,
+            "arch": std::env::consts::ARCH,
+            "ver": env!("CARGO_PKG_VERSION"),
         },
     })
 }
