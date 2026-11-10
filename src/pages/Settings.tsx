@@ -5,6 +5,7 @@ import { Modal, Toggle } from "../components/ui";
 import LinePicker from "../components/LinePicker";
 import { autoLineEnabled, pickLine, setAutoLine } from "../autoLine";
 import { copyPlaybackLog, initPlaybackLog, setPlaybackLog, tracePlayback, usePlaybackLog } from "../playbackDiagnostics";
+import { formatNetDiag, shortVerdict } from "../netDiagReport";
 import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRefresh, ISettings, ISun, IVolMute, IList } from "../icons";
 
 /* 独立设置页：线路 / 外观 / 播放 / 本地数据 / 清理缓存 / 网络诊断 / 关于
@@ -193,18 +194,19 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
             <button onClick={async () => {
               try {
                 const diag = await api.netDiag();
-                const text = JSON.stringify(diag, null, 2);
-                logLine(`[net_diag] ${text}`);
+                // 落盘走原始 JSON（便于脚本统计），复制给对方的是分段可读报告。
+                logLine(`[net_diag] ${JSON.stringify(diag)}`);
                 const http = (diag.http ?? {}) as { ms?: number; status?: number };
                 const dns = (diag.dns ?? {}) as { count?: number; has_fake_ip?: boolean };
                 const env = (diag.env ?? {}) as Record<string, unknown>;
                 tracePlayback("net.diag", {
+                  verdict: String(diag.verdict ?? ""),
                   host: hostOf(String(diag.host ?? "")), http_status: http.status ?? null, http_ms: http.ms ?? null,
                   dns_count: dns.count ?? null, fake_ip: dns.has_fake_ip ?? null,
                   proxy: Object.values(env).some(Boolean), strict: strictSecurity,
                 });
-                await navigator.clipboard?.writeText(text);
-                toast("网络诊断结果已复制", "ok");
+                await navigator.clipboard?.writeText(formatNetDiag(diag));
+                toast(`诊断已复制 · ${shortVerdict(diag)}`, "ok");
               } catch (e) {
                 toast((e as Error).message || "诊断失败", "info");
               }
@@ -212,7 +214,7 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><ILink size={16} /></span>
               <div className="flex-1">
                 <div className="text-[12.5px] text-on">网络诊断</div>
-                <div className="text-[10.5px] text-mut">检测 DNS / 系统代理 / 官网连通性</div>
+                <div className="text-[10.5px] text-mut">DNS / TCP / 系统代理 / 官网连通性，一键复制带结论的报告</div>
               </div>
               <IChevR size={15} className="text-mut" />
             </button>
