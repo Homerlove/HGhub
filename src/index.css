@@ -550,6 +550,8 @@ html.theme-light .article-body { color: rgba(20,24,30,.82); }
 .hg-chip-strong  { background: rgba(0, 0, 0, .62); color: #fff; }
 .hg-chip:active  { background: rgba(0, 0, 0, .62); }
 .hg-ov-shadow    { text-shadow: 0 1px 8px rgba(0, 0, 0, .7); }
+/* 没有压暗层时的文字保读：近处硬阴影 + 远处柔光，亮画面也不糊 */
+.hg-ov-shadow-strong { text-shadow: 0 1px 3px rgba(0, 0, 0, .92), 0 2px 12px rgba(0, 0, 0, .78); }
 
 /* 安卓 WebView 点按会留下系统黄色焦点框，视频/底栏这类沉浸按钮一律去掉 */
 .hg-tabbar button,
