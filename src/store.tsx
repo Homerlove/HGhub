@@ -128,6 +128,8 @@ type Store = {
   toggleFollowLocal: (uid: number) => boolean;
   theater: boolean; setTheater: (v: boolean | ((p: boolean) => boolean)) => void;
   fs: boolean; setFs: (v: boolean | ((p: boolean) => boolean)) => void;
+  /** 移动端「净屏」：只留画面，UI 全隐 */
+  clean: boolean; setClean: (v: boolean | ((p: boolean) => boolean)) => void;
   muted: boolean; setMuted: (v: boolean | ((p: boolean) => boolean)) => void;
   muteOnStartup: boolean; setMuteOnStartup: (on: boolean) => void;
   swipeEp: boolean; setSwipeEp: (on: boolean) => void;
@@ -154,6 +156,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [lineEpoch, setLineEpoch] = useState(0);
   const [theater, setTheaterState] = useState(false);
   const [fs, setFsState] = useState(false);
+  const [clean, setCleanState] = useState(false);
   const [strictSecurity, setStrictSecurityState] = useState<boolean>(isStrictSecurity);
   const [cliRelaxed, setCliRelaxed] = useState(false);
   const [strictSecurityReady, setStrictSecurityReady] = useState(false);
@@ -288,6 +291,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const setFs = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
     setFsState((prev) => (typeof v === "function" ? (v as (p: boolean) => boolean)(prev) : v));
+    // 进出全屏/净屏时把「净屏」收掉，避免退出后 UI 还藏着
+    setCleanState(false);
+  }, []);
+
+  const setClean = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
+    setCleanState((prev) => (typeof v === "function" ? (v as (p: boolean) => boolean)(prev) : v));
   }, []);
 
   const setMuted = useCallback((v: boolean | ((prev: boolean) => boolean)) => {
@@ -313,7 +322,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isLiked: (id) => p.likes.includes(id),
     isFav: (id) => p.favs.includes(id),
     toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
-    muted: p.muted, setMuted, volume: p.volume, setVolume, theater, setTheater, fs, setFs,
+    muted: p.muted, setMuted, volume: p.volume, setVolume, theater, setTheater, fs, setFs, clean, setClean,
     muteOnStartup: p.muteOnStartup, setMuteOnStartup,
     swipeEp: p.swipeEp, setSwipeEp,
     searchHist: p.searchHist, addSearch, clearSearchHist,
@@ -322,7 +331,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     setMuted, setMuteOnStartup, setSwipeEp, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
-    toasts, toast, lineEpoch, theater, setTheater, fs, setFs]);
+    toasts, toast, lineEpoch, theater, setTheater, fs, setFs, clean, setClean]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
