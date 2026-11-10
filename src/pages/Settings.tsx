@@ -42,25 +42,20 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
       setChecking(false);
     }
   };
-  /** 应用内更新：下载安装包 → 交给系统安装器。
+  /** 更新：用系统浏览器打开下载页，由系统/浏览器完成下载与安装。
    *
-   * 加速源在后端处理（直连 GitHub 拉不动时自动换），前端只等结果。
+   * 不再自己下载 APK 并调安装器 —— 那条路在安卓上要额外过 FileProvider
+   * 与「安装未知应用」授权，失败点多，体验并不比浏览器好。
    */
   const doUpdate = async () => {
     if (!update) return;
-    if (!update.asset) {
-      api.openUrl(update.url).catch(() => {});
-      return;
-    }
-    setUpdating("下载中…");
+    setUpdating("打开中…");
     try {
-      const path = await api.downloadUpdate(update.asset.url, update.asset.name);
-      setUpdating("调起安装器…");
-      await api.installUpdate(path);
-      setUpdate(null);
-      toast("下载完成，按系统提示安装即可", "ok");
+      await api.openUrl(update.url);
     } catch (e) {
-      toast((e as Error).message || "更新失败", "info");
+      navigator.clipboard?.writeText(update.url)
+        .then(() => toast("下载地址已复制，可在浏览器粘贴打开", "ok"))
+        .catch(() => toast((e as Error).message || "打开失败", "info"));
     } finally {
       setUpdating("");
     }
@@ -287,10 +282,10 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
           </div>
 
           <div className="mt-4 divide-y divide-s3">
-            <button onClick={() => { navigator.clipboard?.writeText("https://github.com/Minireel/HGhub").then(() => toast("仓库地址已复制", "ok")).catch(() => {}); }}
+            <button onClick={() => { api.openUrl("https://github.com/zxsos/HGhub").catch(() => { navigator.clipboard?.writeText("https://github.com/zxsos/HGhub").then(() => toast("仓库地址已复制", "ok")).catch(() => {}); }); }}
               className="w-full flex items-center gap-2 py-2.5 text-left pressable">
               <ILink size={15} className="text-mut" />
-              <span className="text-[12px] text-on/85">github.com/Minireel/HGhub</span>
+              <span className="text-[12px] text-on/85">github.com/zxsos/HGhub</span>
               <span className="ml-auto text-[10.5px] text-primary">复制</span>
             </button>
             <button onClick={() => { navigator.clipboard?.writeText("https://huangguoai.com").then(() => toast("站点地址已复制", "ok")).catch(() => {}); }}
@@ -346,17 +341,9 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               className="flex-1 h-9 rounded-(--r-ctl) bg-s3 text-[12.5px] text-on/80 pressable disabled:opacity-60">稍后</button>
             <button onClick={() => void doUpdate()} disabled={!!updating}
               className="flex-1 h-9 rounded-(--r-ctl) bg-primary text-[12.5px] font-semibold text-on-primary pressable disabled:opacity-60">
-              {updating || (update?.asset ? "立即更新" : "前往下载")}
+              {updating || "前往下载"}
             </button>
           </div>
-          {!!update?.asset && (
-            <button onClick={() => {
-              if (!update) return;
-              api.openUrl(update.url).catch(() => {
-                navigator.clipboard?.writeText(update.url).then(() => toast("下载地址已复制", "ok")).catch(() => {});
-              });
-            }} className="w-full h-9 mt-2 rounded-(--r-ctl) bg-s3 text-[12px] text-on/80 pressable">浏览器打开</button>
-          )}
           <div className="text-[10px] text-dim mt-2.5 break-all">{update?.url}</div>
         </div>
       </Modal>

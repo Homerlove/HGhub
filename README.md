@@ -35,8 +35,8 @@ Windows / macOS / Android 三端 · Fluent 设计 · 沉浸式竖屏播放
 
 ## 官方渠道与仿冒提醒
 
-- **唯一官方仓库**：[github.com/Minireel/HGhub](https://github.com/Minireel/HGhub)
-- **唯一下载渠道**：[GitHub Releases](https://github.com/Minireel/HGhub/releases)。仓库源码页不放任何可执行文件，
+- **唯一官方仓库**：[github.com/zxsos/HGhub](https://github.com/zxsos/HGhub)
+- **唯一下载渠道**：[GitHub Releases](https://github.com/zxsos/HGhub/releases)。仓库源码页不放任何可执行文件，
   其余网站、网盘、QQ 群、公众号、第三方下载站分发的「HGhub」安装包**一律非官方**，作者不保证其安全性与完整性。
 
 > 🚫 **已发现的恶意修改版**：[`hichuv/HGhub`](https://github.com/hichuv/HGhub)

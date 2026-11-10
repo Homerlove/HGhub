@@ -161,8 +161,6 @@ pub fn run() {
             api::line_try_main,
             api::line_health,
             api::check_update,
-            api::download_update,
-            api::install_update,
             api::open_url,
             api::set_orientation,
             api::api_login,
