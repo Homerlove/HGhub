@@ -890,9 +890,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 </div>
               )}
 
-              {/* 渐变压暗，保证文字可读 */}
+              {/* 只剩极薄一层：给白字垫底用，不再往下压成黑边 */}
               <div className="absolute inset-0 pointer-events-none"
-                style={{ background: "linear-gradient(0deg, rgba(8,11,15,.86) 0, rgba(11,14,20,.18) 26%, transparent 48%)" }} />
+                style={{ background: "linear-gradient(0deg, rgba(8,11,15,.3) 0, rgba(11,14,20,.06) 18%, transparent 36%)" }} />
 
               {/* 顶部 */}
               {!fs && !clean && mode === "context" ? (
@@ -1071,23 +1071,32 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               </div>
               )}
 
-              {/* 移动端：标题 + 详情标签 + 进度线（不加底色，只铺一层柔和压暗保证可读） */}
+              {/* 移动端：标题 + 详情标签 + 进度线
+                  不加任何压暗层——黑边彻底去掉，全靠文字阴影保读；
+                  进度条轨道几乎不可见，只用白点标播放位置。 */}
               {!fs && !clean && !isDesktop && (
                 <div className="absolute inset-x-0 z-20" style={{ bottom: `calc(var(--sab, 0px) + ${bottomInset}px)` }}>
-                  <div className="absolute inset-x-0 bottom-0 h-[190px] pointer-events-none"
-                    style={{ background: "linear-gradient(0deg, rgba(0,0,0,.82) 0%, rgba(0,0,0,.42) 45%, transparent 100%)" }} />
-                  <p className="relative px-4 pb-2 text-[14px] font-semibold leading-snug hg-ink hg-ov-shadow clamp-2">{meta.title}</p>
+                  <p className="relative px-4 pb-2 text-[14px] font-semibold leading-snug hg-ink-2 hg-ov-shadow-strong clamp-2">{meta.title}</p>
                   <div className="relative pt-1.5 pb-2.5">
                     <button onClick={() => setPanel("detail")}
-                      className="px-4 flex items-center gap-0.5 text-[10.5px] font-medium hg-ink hg-ov-shadow pressable">
+                      className="px-4 flex items-center gap-0.5 text-[10.5px] font-medium hg-ink-3 hg-ov-shadow-strong pressable">
                       详情 · 第 {curEp} 集<IChevR size={11} />
                     </button>
                     <div ref={barRef} className="mx-4 mt-2 relative" style={{ height: 14, touchAction: "none" }}
                       onPointerDown={onBarDown} onPointerMove={onBarMove} onPointerUp={onBarUp} onPointerCancel={onBarUp}>
-                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2.5px] rounded-full" style={{ background: "rgba(255,255,255,.3)" }}>
-                        <div className="h-full rounded-full bg-white"
-                          style={{ width: `${barProgress * 100}%`, transition: barPct !== null ? "none" : "width .25s linear" }} />
+                      {/* 轨道：几乎看不见，只暗示可拖动 */}
+                      <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-[2px] rounded-full" style={{ background: "rgba(255,255,255,.1)" }}>
+                        <div className="h-full rounded-full"
+                          style={{ width: `${barProgress * 100}%`, background: "rgba(255,255,255,.26)", transition: barPct !== null ? "none" : "width .25s linear" }} />
                       </div>
+                      {/* 进度点：整个进度条唯一的实心元素 */}
+                      <span className="absolute top-1/2 w-[7px] h-[7px] rounded-full bg-white pointer-events-none"
+                        style={{
+                          left: `${barProgress * 100}%`,
+                          transform: "translate(-50%, -50%)",
+                          boxShadow: "0 0 8px rgba(0,0,0,.55)",
+                          transition: barPct !== null ? "none" : "left .25s linear",
+                        }} />
                       {barPct !== null && (
                         <div className="absolute left-1/2 -translate-x-1/2 -top-8 px-2.5 py-1 rounded-md hg-chip-strong backdrop-blur-md text-[12px] font-bold tabular-nums whitespace-nowrap">
                           {fmtTime(barPct * (duration || 0))}
