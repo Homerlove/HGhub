@@ -326,6 +326,7 @@ jobs:
           else
             V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           fi
+          V="${V%%+*}"
           node scripts/set-version.mjs "$V"
           echo "version=$V" >> "$GITHUB_OUTPUT"
           echo "versionName=$V"
