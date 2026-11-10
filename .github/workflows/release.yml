@@ -372,8 +372,12 @@ jobs:
 
       - name: 构建（无签名 archive）
         shell: bash
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: |
           set -euo pipefail
+          printf '127.0.0.1:1420' > "$TMPDIR/com.hghub.huangguo-server-addr"
+          ls -l "$TMPDIR/com.hghub.huangguo-server-addr"
           cd src-tauri/gen/apple
           xcodebuild -project "${{ steps.proj.outputs.xcodeproj }}" \
             -scheme "${{ steps.proj.outputs.scheme }}" \
