@@ -64,7 +64,7 @@ type Persist = {
 const LS = "hghub_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
-  muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: false,
+  muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: true,
 };
 
 /** 旧版本 history 是 number[]，读出来时升级成带进度的结构 */
@@ -91,7 +91,16 @@ function loadPersist(): Persist {
     const p = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Persist>) };
     // 只在启动时应用；本次使用中取消静音不会关闭此偏好。
     const muteOnStartup = p.muteOnStartup !== false;
-    return { ...p, muteOnStartup, muted: muteOnStartup || p.muted === true, history: normalizeHistory(p.history) };
+    /* 1.2.9 起上下划默认就是切集。老配置里 swipeEp 存的 false 是当年的默认值，
+       不是用户主动关的，所以这里做一次性迁移；用户之后自己关掉不会再被改回来。 */
+    let swipeEp = p.swipeEp !== false;
+    try {
+      if (localStorage.getItem("hghub_swipe_ep_v2") !== "1") {
+        swipeEp = true;
+        localStorage.setItem("hghub_swipe_ep_v2", "1");
+      }
+    } catch { /* ignore */ }
+    return { ...p, swipeEp, muteOnStartup, muted: muteOnStartup || p.muted === true, history: normalizeHistory(p.history) };
   } catch {
     return DEFAULTS;
   }
