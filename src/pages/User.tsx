@@ -3,12 +3,14 @@ import { api, fmt } from "../api";
 import type { UserProfile, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Masonry } from "../components/cards";
+import { InplaceSearch } from "../components/InplaceSearch";
 import { Avatar, Empty } from "../components/ui";
 import { IBack, IGrid, ISearch, IUser } from "../icons";
 
 /* ================= 关注流 ================= */
 export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
-  const { push, user, setLoginOpen, toast, pop, setTab, setSearchScope } = useStore();
+  const { push, user, setLoginOpen, toast } = useStore();
+  const [searching, setSearching] = useState(false);
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
@@ -62,7 +64,7 @@ export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: bool
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[17px] font-bold text-on">关注</span>
           <span className="text-[10.5px] text-mut">{items.length} 部</span>
-          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => setSearching(true)} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
       </div>
 
@@ -83,13 +85,15 @@ export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: bool
         {loading && items.length > 0 && <div className="flex justify-center py-3"><div className="w-6 h-6 spinner" /></div>}
         {!loading && items.length > 0 && page >= pages && <div className="text-center text-[10.5px] text-dim py-3">— 已经到底啦 —</div>}
       </div>
+      {searching && <InplaceSearch kind="video" wide={wide} onClose={() => setSearching(false)} onOpenVideo={(v, list) => push({ kind: "feed", videoIds: list.map((x) => x.id), index: list.findIndex((x) => x.id === v.id), title: "关注" })} />}
     </div>
   );
 }
 
 /* ================= 用户主页 ================= */
 export function UserPage({ id, name, onBack, wide }: { id: number; name?: string; onBack: () => void; wide: boolean }) {
-  const { push, toast, follows, toggleFollowLocal, user, setLoginOpen, pop, setTab, setSearchScope } = useStore();
+  const { push, toast, follows, toggleFollowLocal, user, setLoginOpen } = useStore();
+  const [searching, setSearching] = useState(false);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<{ followers?: number; video_count?: number; post_count?: number; like_count?: number }>({});
   const [items, setItems] = useState<VideoCard[]>([]);
@@ -154,7 +158,7 @@ export function UserPage({ id, name, onBack, wide }: { id: number; name?: string
         <div className="px-3 pt-2 pb-3 flex items-center gap-2.5">
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[16px] font-bold text-on truncate">{profile?.nickname || name || "用户主页"}</span>
-          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => setSearching(true)} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
       </div>
 
@@ -194,6 +198,7 @@ export function UserPage({ id, name, onBack, wide }: { id: number; name?: string
         {loading && items.length > 0 && <div className="flex justify-center py-3"><div className="w-6 h-6 spinner" /></div>}
         {!loading && items.length > 0 && page >= pages && <div className="text-center text-[10.5px] text-dim py-3">— 已经到底啦 —</div>}
       </div>
+      {searching && <InplaceSearch kind="video" wide={wide} onClose={() => setSearching(false)} onOpenVideo={(v, list) => push({ kind: "feed", videoIds: list.map((x) => x.id), index: list.findIndex((x) => x.id === v.id), title: profile?.nickname || name || "用户作品" })} />}
     </div>
   );
 }

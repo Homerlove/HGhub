@@ -3,6 +3,7 @@ import { api, fmt } from "../api";
 import type { Post, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Masonry, RowCard } from "../components/cards";
+import { InplaceSearch } from "../components/InplaceSearch";
 import { Empty, Img } from "../components/ui";
 import { IBack, IChevR, IGlobe, IGrid, ISearch, ITrophy } from "../icons";
 
@@ -175,7 +176,8 @@ function PreviewStatus({ name, loading, error, onRetry }: { name: string; loadin
 
 /* ================= 频道详情页 ================= */
 export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: string; onBack: () => void; wide: boolean }) {
-  const { push, pop, setTab, setSearchScope } = useStore();
+  const { push } = useStore();
+  const [searching, setSearching] = useState(false);
   const [sort, setSort] = useState<"最新" | "最热" | "高分">("最新");
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(0);
@@ -232,7 +234,7 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
           <div className="flex-1 min-w-0">
             <div className="text-[17px] font-bold text-on leading-tight">{name}</div>
             <div className="text-[10.5px] text-mut">共 {items.length} 部 · 已加载 {page}/{Math.max(pages, 1)} 页</div>
-            <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+            <button onClick={() => setSearching(true)} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
           </div>
         </div>
         <div className="px-4 pb-3 flex gap-2">
@@ -257,6 +259,7 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
           <div className="text-center text-[10.5px] text-dim py-3">— 已经到底啦 —</div>
         )}
       </div>
+      {searching && <InplaceSearch kind="video" wide={wide} onClose={() => setSearching(false)} onOpenVideo={(v, list) => push({ kind: "feed", videoIds: list.map((x) => x.id), index: list.findIndex((x) => x.id === v.id), title: `搜索 · ${name}` })} />}
     </div>
   );
 }
