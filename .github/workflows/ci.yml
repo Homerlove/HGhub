@@ -131,11 +131,11 @@ jobs:
         run: |
           set -euo pipefail
           sudo sed -i -E \
-            -e 's|https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+            -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
             /etc/apt/sources.list.d/ubuntu.sources
           if [ -f /etc/apt/apt-mirrors.txt ]; then
             sudo sed -i -E \
-              -e 's|https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|g' \
+              -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
               /etc/apt/apt-mirrors.txt
           fi
           echo "arch=$(dpkg --print-architecture)"
