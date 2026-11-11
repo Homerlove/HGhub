@@ -56,7 +56,10 @@ pub fn error_kind(error: &str) -> &'static str {
         }
     } else if error.contains("DNS") {
         "dns_error"
-    } else if error.contains("超时") || error.to_ascii_lowercase().contains("timeout") {
+    } else if error.contains("超时")
+        || error.to_ascii_lowercase().contains("timeout")
+        || error.to_ascii_lowercase().contains("timed out")
+    {
         "timeout"
     } else if error.starts_with("HTTP ") {
         "http_error"
@@ -331,6 +334,15 @@ fn env_line(host: &str) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_timeout_and_policy_errors_keep_their_categories() {
+        assert_eq!(error_kind("client error (Connect) ← operation timed out"), "timeout");
+        assert_eq!(error_kind("request timeout"), "timeout");
+        assert_eq!(error_kind("DNS 解析超时"), "dns_error");
+        assert_eq!(error_kind("禁止访问普通内网"), "private_address_denied");
+        assert_eq!(error_kind("HTTP 403 Forbidden"), "http_error");
+    }
 
     #[test]
     fn commands_stop_writes_when_disabled_and_read_retained_logs() {

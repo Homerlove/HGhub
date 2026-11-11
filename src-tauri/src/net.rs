@@ -27,6 +27,7 @@ use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
 
@@ -158,6 +159,8 @@ fn build_client(host: &str, addrs: &[SocketAddr]) -> Result<reqwest::Client, Str
 const CLIENT_TTL: Duration = Duration::from_secs(30);
 type ClientCache = HashMap<String, (Instant, Arc<reqwest::Client>)>;
 static CLIENTS: Lazy<Mutex<ClientCache>> = Lazy::new(|| Mutex::new(HashMap::new()));
+static MEDIA_DNS_ROUTES: Lazy<Mutex<crate::media_dns::Routes>> =
+    Lazy::new(|| Mutex::new(crate::media_dns::Routes::default()));
 
 fn cached_client(cache: &ClientCache, key: &str, now: Instant) -> Option<Arc<reqwest::Client>> {
     cache
@@ -169,21 +172,30 @@ fn cached_client(cache: &ClientCache, key: &str, now: Instant) -> Option<Arc<req
 /// 缓存按模式、主机和端口隔离；有效期内仅复用已经检查并固定地址的客户端。
 /// 到期后重新检查全部 DNS 答案，不使用旧连接绕过新的目标检查。
 async fn client_for(raw: &str) -> Result<(url::Url, Arc<reqwest::Client>), String> {
+    client_for_dns(raw, false).await
+}
+
+async fn client_for_dns(raw: &str, public_dns: bool) -> Result<(url::Url, Arc<reqwest::Client>), String> {
     let strict = network_policy::strict_security();
     let target = network_policy::parse_target_with_mode(raw, strict)?;
     let host = target.host_str().ok_or("目标缺少主机名")?;
     let port = target.port_or_known_default().ok_or("目标端口无效")?;
-    let key = format!("{strict}:{host}:{port}");
+    let key = format!("{strict}:{host}:{port}:{public_dns}");
     {
         let cache = CLIENTS.lock().map_err(|_| "HTTP 客户端锁失败")?;
         if let Some(http) = cached_client(&cache, &key, Instant::now()) {
             return Ok((target, http));
         }
     }
-    let addrs = if strict {
-        network_policy::resolve_target(&target, strict).await?
+    let (addrs, ttl) = if public_dns {
+        let resolver = build_client(crate::media_dns::HOST, &crate::media_dns::BOOTSTRAP)?;
+        let resolution = crate::media_dns::resolve(&resolver, host, port).await?;
+        network_policy::check_addresses_with_mode(&resolution.addresses, strict)?;
+        (resolution.addresses, CLIENT_TTL.min(resolution.ttl))
+    } else if strict {
+        (network_policy::resolve_target(&target, strict).await?, CLIENT_TTL)
     } else {
-        Vec::new()
+        (Vec::new(), CLIENT_TTL)
     };
     let http = Arc::new(build_client(host, &addrs)?);
     let now = Instant::now();
@@ -195,7 +207,7 @@ async fn client_for(raw: &str) -> Result<(url::Url, Arc<reqwest::Client>), Strin
         if cache.len() >= 64 {
             cache.clear();
         }
-        cache.insert(key, (now + CLIENT_TTL, http.clone()));
+        cache.insert(key, (now + ttl, http.clone()));
     }
     Ok((target, http))
 }
@@ -203,6 +215,9 @@ async fn client_for(raw: &str) -> Result<(url::Url, Arc<reqwest::Client>), Strin
 pub fn refresh_client() {
     if let Ok(mut cache) = CLIENTS.lock() {
         cache.clear();
+    }
+    if let Ok(mut routes) = MEDIA_DNS_ROUTES.lock() {
+        *routes = crate::media_dns::Routes::default();
     }
 }
 
@@ -213,6 +228,16 @@ pub async fn get(
     accept: Option<&str>,
     referer: Option<&str>,
 ) -> Result<reqwest::Response, String> {
+    get_with_dns(raw, timeout, accept, referer, false).await
+}
+
+async fn get_with_dns(
+    raw: &str,
+    timeout: Duration,
+    accept: Option<&str>,
+    referer: Option<&str>,
+    public_dns: bool,
+) -> Result<reqwest::Response, String> {
     tokio::time::timeout(timeout, async {
         let policy_error = |phase: &str, error: String| {
             crate::playback_log::record("network.target_failed", json!({"resource": crate::playback_log::resource_id(raw), "phase": phase, "error_kind": crate::playback_log::error_kind(&error)}));
@@ -221,7 +246,7 @@ pub async fn get(
         let mut next = network_policy::parse_target(raw).map_err(|e| policy_error("parse", e))?;
         for hop in 0..=5 {
             let resolving = Instant::now();
-            let (target, http) = client_for(next.as_str()).await.map_err(|e| policy_error("dns_or_client", e))?;
+            let (target, http) = client_for_dns(next.as_str(), public_dns).await.map_err(|e| policy_error("dns_or_client", e))?;
             crate::playback_log::record("network.target_ready", json!({"resource": crate::playback_log::resource_id(raw), "target_resource": crate::playback_log::resource_id(target.as_str()), "dns_or_client_ms": resolving.elapsed().as_millis() as u64, "hop": hop}));
             let mut request = http.get(target.clone()).timeout(timeout);
             if let Some(value) = accept {
@@ -872,6 +897,10 @@ pub async fn fetch_bytes(url: &str) -> Result<(Option<String>, Vec<u8>), String>
     let resource = crate::playback_log::resource_id(url);
     let mut attempt = 0;
     let url = url.to_string();
+    let target = url::Url::parse(&url).ok();
+    let host = target.as_ref().and_then(|target| target.host_str()).unwrap_or("").to_string();
+    let public_dns = AtomicBool::new(MEDIA_DNS_ROUTES.lock().ok()
+        .is_some_and(|routes| routes.prefers_public(&host, Instant::now())));
     let referer = format!("{}/", base());
     with_retry(true, || {
         attempt += 1;
@@ -879,13 +908,17 @@ pub async fn fetch_bytes(url: &str) -> Result<(Option<String>, Vec<u8>), String>
         let resource = resource.clone();
         let url = url.clone();
         let referer = referer.clone();
+        let host = &host;
+        let target = &target;
+        let public_dns = &public_dns;
         async move {
+            let using_public_dns = public_dns.load(Ordering::Relaxed);
             let started = Instant::now();
             crate::playback_log::record("network.begin", json!({"request": request, "resource": resource, "attempt": attempt}));
             let mut status = None;
             let mut headers_ms = None;
             let result = async {
-                let resp = get(&url, Duration::from_secs(20), None, Some(&referer)).await?;
+                let resp = get_with_dns(&url, Duration::from_secs(20), None, Some(&referer), using_public_dns).await?;
                 status = Some(resp.status().as_u16());
                 headers_ms = Some(started.elapsed().as_millis() as u64);
                 if !resp.status().is_success() {
@@ -899,7 +932,22 @@ pub async fn fetch_bytes(url: &str) -> Result<(Option<String>, Vec<u8>), String>
                 let bytes = resp.bytes().await.map_err(|e| err_text(&e))?.to_vec();
                 Ok((ctype, bytes))
             }.await;
-            crate::playback_log::record("network.end", json!({"request": request, "resource": resource, "attempt": attempt, "status": status, "headers_ms": headers_ms, "elapsed_ms": started.elapsed().as_millis() as u64, "bytes": result.as_ref().ok().map(|(_, bytes)| bytes.len()), "error_kind": result.as_ref().err().map(|e: &String| crate::playback_log::error_kind(e))}));
+            if using_public_dns {
+                if let Ok(mut routes) = MEDIA_DNS_ROUTES.lock() {
+                    if result.is_ok() {
+                        routes.remember(host, Instant::now());
+                    } else {
+                        routes.forget(host);
+                    }
+                }
+            }
+            if let Err(error) = &result {
+                if target.as_ref().is_some_and(|target| crate::media_dns::eligible(target, error)) {
+                    public_dns.store(!using_public_dns, Ordering::Relaxed);
+                    crate::playback_log::record("network.dns_fallback", json!({"resource": resource, "attempt": attempt, "public_dns": !using_public_dns, "error_kind": crate::playback_log::error_kind(error)}));
+                }
+            }
+            crate::playback_log::record("network.end", json!({"request": request, "resource": resource, "attempt": attempt, "public_dns": using_public_dns, "status": status, "headers_ms": headers_ms, "elapsed_ms": started.elapsed().as_millis() as u64, "bytes": result.as_ref().ok().map(|(_, bytes)| bytes.len()), "error_kind": result.as_ref().err().map(|e: &String| crate::playback_log::error_kind(e))}));
             result
         }
     })
@@ -909,6 +957,38 @@ pub async fn fetch_bytes(url: &str) -> Result<(Option<String>, Vec<u8>), String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    #[ignore = "联网测试：需要 HGHUB_TEST_MEDIA_URL 为当前有效的媒体地址"]
+    async fn media_recovers_from_failed_system_dns() {
+        let raw = std::env::var("HGHUB_TEST_MEDIA_URL").expect("HGHUB_TEST_MEDIA_URL");
+        let target = url::Url::parse(&raw).unwrap();
+        let host = target.host_str().unwrap();
+        let port = target.port_or_known_default().unwrap();
+        let failed_client = reqwest::Client::builder()
+            .no_proxy()
+            .resolve_to_addrs(host, &["127.0.0.1:9".parse().unwrap()])
+            .connect_timeout(Duration::from_millis(100))
+            .build()
+            .unwrap();
+        refresh_client();
+        CLIENTS.lock().unwrap().insert(
+            format!("{}:{host}:{port}:false", network_policy::strict_security()),
+            (Instant::now() + CLIENT_TTL, Arc::new(failed_client)),
+        );
+        let (_, bytes) = fetch_bytes(&raw).await.expect("备用 DNS 应恢复真实媒体下载");
+        assert!(!bytes.is_empty());
+        assert!(MEDIA_DNS_ROUTES.lock().unwrap().prefers_public(host, Instant::now()));
+        let (_, again) = fetch_bytes(&raw).await.expect("后续请求应复用恢复的路径");
+        if bytes.starts_with(b"#EXTM3U") {
+            assert!(again.starts_with(b"#EXTM3U"));
+        } else {
+            assert_eq!(bytes, again);
+        }
+        if let Ok(path) = std::env::var("HGHUB_TEST_MEDIA_OUTPUT") {
+            std::fs::write(path, bytes).unwrap();
+        }
+    }
 
     #[tokio::test]
     async fn terminal_errors_do_not_retry_but_transient_failures_can_recover() {
