@@ -24,19 +24,19 @@ mod tests {
     fn credentials_are_bound_to_origin() {
         let store = SessionStore::new();
         store.set(
-            "https://huangguoai.com",
+            "https://source.example",
             "secret-token".into(),
             json!({"id": 1}),
         );
         assert_eq!(
-            store.token("https://huangguoai.com").as_deref(),
+            store.token("https://source.example").as_deref(),
             Some("secret-token")
         );
-        assert_eq!(store.token("https://huangguoai.ai"), None);
+        assert_eq!(store.token("https://other.example"), None);
         assert_eq!(store.token("https://evil.example"), None);
         assert!(store.user("https://evil.example").is_null());
         store.clear();
-        assert_eq!(store.token("https://huangguoai.com"), None);
+        assert_eq!(store.token("https://source.example"), None);
     }
 
     #[test]
@@ -44,8 +44,8 @@ mod tests {
         let store = SessionStore::new();
         *store.current.lock().unwrap() =
             serde_json::from_str(r#"{"token":"legacy","user":{"id":1}}"#).unwrap();
-        assert_eq!(store.token("https://huangguoai.com"), None);
-        assert!(store.user("https://huangguoai.com").is_null());
+        assert_eq!(store.token("https://source.example"), None);
+        assert!(store.user("https://source.example").is_null());
     }
 }
 

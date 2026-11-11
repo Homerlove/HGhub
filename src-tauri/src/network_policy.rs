@@ -1,7 +1,7 @@
 //! 不可信目标的连接策略。FakeIP 是明确例外，不能把它当作普通私网拒绝。
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::RwLock;
@@ -88,6 +88,18 @@ fn is_internal_webview_host(name: &str) -> bool {
     )
 }
 
+fn nat64_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let segments = ip.segments();
+    // RFC 6052 的知名前缀 64:ff9b::/96，末 32 位承载 IPv4。
+    if segments[0] == 0x0064 && segments[1] == 0xff9b && segments[2..6] == [0, 0, 0, 0] {
+        let octets = ip.octets();
+        return Some(Ipv4Addr::new(
+            octets[12], octets[13], octets[14], octets[15],
+        ));
+    }
+    None
+}
+
 pub fn allowed_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => {
@@ -112,8 +124,12 @@ pub fn allowed_ip(ip: IpAddr) -> bool {
             if let Some(v4) = ip.to_ipv4_mapped() {
                 return allowed_ip(IpAddr::V4(v4));
             }
+            if let Some(v4) = nat64_ipv4(ip) {
+                return allowed_ip(IpAddr::V4(v4));
+            }
             let s = ip.segments();
-            // 仅全球单播；拒绝 ULA、链路本地、回环、组播、NAT64，以及可封装私网 IPv4 的 6to4/Teredo。
+            // 仅全球单播；NAT64 已在上面按 IPv4 判定，这里拒绝 ULA、链路本地、回环、
+            // 组播、6to4/Teredo 等其他特殊段。
             (s[0] & 0xe000) == 0x2000
                 && s[0] != 0x2002
                 && !(s[0] == 0x2001 && (s[1] < 0x0200 || s[1] == 0x0db8))
@@ -280,6 +296,7 @@ mod tests {
             "198.19.255.255",
             "2606:4700:4700::1111",
             "::ffff:198.18.0.1",
+            "64:ff9b::0808:0808",
         ] {
             assert!(allowed_ip(ip.parse().unwrap()), "{ip}");
         }
@@ -311,6 +328,7 @@ mod tests {
             "::ffff:127.0.0.1",
             "::ffff:192.168.1.1",
             "64:ff9b::c0a8:101",
+            "64:ff9b::a00:1",
             "2002:c0a8:101::1",
             "2001::1",
             "2001:db8::1",

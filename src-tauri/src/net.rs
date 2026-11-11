@@ -26,94 +26,16 @@ use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-/// 默认上游（固定线路 1）。
-pub const DEFAULT_BASE: &str = "https://huangguoai.com";
+/// 默认上游：门牌化后没有内置源，必须由用户输入地址激活。
+pub const DEFAULT_BASE: &str = "";
 
-/// 当前上游基址（不带结尾斜杠）。可在设置里切到固定线路 2 或镜像线路，运行时立即生效。
-static BASE: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new(DEFAULT_BASE.to_string()));
-/// 线路配置落盘位置（应用数据目录/line.json），由 [`bind_base`] 在启动时绑定。
-static BASE_FILE: Lazy<RwLock<Option<PathBuf>>> = Lazy::new(|| RwLock::new(None));
-
-/// 当前上游基址。
+/// 当前门牌基址（不带结尾斜杠）。唯一来源是 [`crate::infra::source`]。
 pub fn base() -> String {
-    BASE.read()
-        .map(|b| b.clone())
-        .unwrap_or_else(|_| DEFAULT_BASE.to_string())
-}
-
-/// 线路必须是纯 HTTPS origin，不允许路径、认证、查询串或片段。
-pub fn normalize_base(raw: &str) -> Option<String> {
-    let parsed = network_policy::parse_target(raw.trim()).ok()?;
-    if parsed.scheme() != "https"
-        || parsed.path() != "/"
-        || parsed.query().is_some()
-        || parsed.fragment().is_some()
-    {
-        return None;
-    }
-    Some(parsed.origin().ascii_serialization())
-}
-
-/// 哪些 origin 允许携带凭据：两个固定入口，加上发布页推荐过、且当前可能作为线路的镜像。
-///
-/// 国内网络连不上 `.com`，只能用镜像；镜像和主站是同一后端、同一个账号体系。
-/// 只认发布页真的给过的地址（见 [`crate::lines::is_trusted_mirror`]），
-/// 用户手填的任意域名依旧会被严格模式拦下。
-pub fn trusted_auth_origin(origin: &str) -> bool {
-    matches!(origin, "https://huangguoai.com" | "https://huangguoai.ai")
-        || crate::lines::is_trusted_mirror(origin)
-}
-
-/// 启动时读回上次选择的线路（文件不存在 / 内容坏了就保持默认）。
-pub fn bind_base(dir: &std::path::Path) {
-    network_policy::bind_security(dir);
-    let path = dir.join("line.json");
-    if let Ok(text) = std::fs::read_to_string(&path) {
-        if let Ok(v) = serde_json::from_str::<Value>(&text) {
-            if let Some(next) = v
-                .get("base")
-                .and_then(|x| x.as_str())
-                .and_then(normalize_base)
-            {
-                crate::lines::remember_line(&next);
-                if let Ok(mut cur) = BASE.write() {
-                    *cur = next;
-                }
-            }
-        }
-    }
-    if let Ok(mut f) = BASE_FILE.write() {
-        *f = Some(path);
-    }
-}
-
-/// 切换线路并落盘，返回规整后的地址。
-pub fn set_base(url: &str) -> Result<String, String> {
-    let next = normalize_base(url)
-        .ok_or_else(|| "线路地址无效（需要纯 HTTPS 站点地址，禁止内网）".to_string())?;
-    let previous = base();
-    crate::lines::remember_line(&next);
-    if let Ok(mut cur) = BASE.write() {
-        *cur = next.clone();
-    }
-    if let Some(path) = BASE_FILE.read().ok().and_then(|p| p.clone()) {
-        let _ = std::fs::write(path, json!({ "base": next }).to_string());
-    }
-    if previous != next {
-        crate::playback_log::record(
-            "line.changed",
-            json!({
-                "previous_host": url::Url::parse(&previous).ok().and_then(|u| u.host_str().map(str::to_owned)),
-                "line_host": url::Url::parse(&next).ok().and_then(|u| u.host_str().map(str::to_owned)),
-            }),
-        );
-    }
-    Ok(next)
+    crate::infra::source::base()
 }
 
 pub const UA: &str =
@@ -743,7 +665,7 @@ fn edge_redirect_target(
     network_policy::redirect_target(current, location)
 }
 
-/// 业务请求：走边缘信封。
+/// 业务请求：兼容旧调用方，内部拼标准信封。
 pub async fn edge(
     origin: &str,
     method: &str,
@@ -751,17 +673,7 @@ pub async fn edge(
     body: Option<Value>,
     token: Option<&str>,
 ) -> Result<Value, String> {
-    let cur = normalize_base(origin).ok_or("业务请求必须使用安全 HTTPS 线路")?;
-    if network_policy::strict_security()
-        && (token.is_some()
-            || matches!(
-                path,
-                "/api/account/loginByPassword" | "/api/account/registerByPassword"
-            ))
-        && !trusted_auth_origin(&cur)
-    {
-        return Err("镜像线路仅供游客浏览；登录/注册请切换到固定线路".into());
-    }
+    let body_is_none = body.is_none();
     let (encoded, ctype) = match &body {
         Some(v) => (
             B64.encode(serde_json::to_vec(v).map_err(|e| e.to_string())?),
@@ -775,6 +687,32 @@ pub async fn edge(
         "body": encoded,
         "content_type": ctype,
     });
+    edge_envelope(origin, envelope, method, path, body_is_none, token).await
+}
+
+/// 适配器已拼好信封、只需传输的入口；`body_is_none` 决定是否允许安全重试。
+pub async fn edge_envelope(
+    origin: &str,
+    envelope: Value,
+    method: &str,
+    path: &str,
+    body_is_none: bool,
+    token: Option<&str>,
+) -> Result<Value, String> {
+    let cur = origin.trim().trim_end_matches('/').to_string();
+    if cur.is_empty() {
+        return Err("尚未设置接入地址".into());
+    }
+    if network_policy::strict_security()
+        && (token.is_some()
+            || matches!(
+                path,
+                "/api/account/loginByPassword" | "/api/account/registerByPassword"
+            ))
+        && !crate::infra::source::is_current_origin(&cur)
+    {
+        return Err("凭据只能发送到当前接入地址".into());
+    }
 
     let url = format!("{cur}/api/edge/request");
     let referer = format!("{cur}/");
@@ -783,14 +721,13 @@ pub async fn edge(
     static NEXT_EDGE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let request = NEXT_EDGE.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let line_host = url::Url::parse(&cur)
-        .unwrap()
-        .host_str()
-        .unwrap()
-        .to_string();
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .unwrap_or_default();
     let operation = edge_operation(path);
     let mut attempt = 0;
-    let guest_get = method.eq_ignore_ascii_case("GET") && body.is_none() && token.is_none();
-    let can_retry = method.eq_ignore_ascii_case("GET") && body.is_none();
+    let guest_get = method.eq_ignore_ascii_case("GET") && body_is_none && token.is_none();
+    let can_retry = method.eq_ignore_ascii_case("GET") && body_is_none;
     let value = with_retry(can_retry, || {
         attempt += 1;
         let attempt = attempt;
@@ -1098,17 +1035,17 @@ mod tests {
 
     #[test]
     fn edge_redirects_only_replay_anonymous_reads() {
-        let current = url::Url::parse("https://huangguoai.ai/api/edge/request").unwrap();
+        let current = url::Url::parse("https://example.com/api/edge/request").unwrap();
         assert_eq!(
             edge_redirect_target(
                 &current,
                 301,
-                "https://huangguoai.com/api/edge/request",
+                "https://cdn.example.net/api/edge/request",
                 true
             )
             .unwrap()
             .host_str(),
-            Some("huangguoai.com")
+            Some("cdn.example.net")
         );
         assert!(edge_redirect_target(&current, 302, "/next", true).is_ok());
         for status in [301, 302, 303, 307, 308] {
@@ -1137,47 +1074,16 @@ mod tests {
     }
 
     #[test]
-    fn base_requires_https_origin_and_auth_trust_is_static() {
-        assert_eq!(
-            normalize_base("https://HUANGGUOAI.COM:443/"),
-            Some(DEFAULT_BASE.into())
-        );
-        for raw in [
-            "http://huangguoai.com",
-            "https://user:pass@huangguoai.com",
-            "https://huangguoai.com/path",
-            "https://huangguoai.com/?secret=1",
-            "https://huangguoai.com/#fragment",
-            "https://192.168.1.1",
-        ] {
-            assert_eq!(normalize_base(raw), None, "{raw}");
-        }
-        assert!(trusted_auth_origin(DEFAULT_BASE));
-        assert!(trusted_auth_origin("https://huangguoai.ai"));
-        assert!(!trusted_auth_origin("https://mirror.example"));
-        assert!(!trusted_auth_origin("https://huangguoai.com.evil.example"));
+    fn default_base_is_empty_until_the_door_is_activated() {
+        assert!(DEFAULT_BASE.is_empty());
     }
 
     #[tokio::test]
-    async fn untrusted_origins_reject_credentials_before_network() {
-        for (path, body, token) in [
-            (
-                "/api/account/loginByPassword",
-                Some(json!({"password":"secret"})),
-                None,
-            ),
-            (
-                "/api/account/registerByPassword",
-                Some(json!({"password":"secret"})),
-                None,
-            ),
-            ("/api/videos", None, Some("secret-token")),
-        ] {
-            let err = edge("https://mirror.invalid", "POST", path, body, token)
-                .await
-                .unwrap_err();
-            assert!(err.contains("镜像线路仅供游客浏览"));
-        }
+    async fn edge_requires_a_configured_source() {
+        let err = edge("", "GET", "/api/videos", None, None)
+            .await
+            .unwrap_err();
+        assert!(err.contains("尚未设置接入地址"));
     }
 
     #[tokio::test]
