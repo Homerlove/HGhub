@@ -7,7 +7,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CARGO_TERM_COLOR=always \
     PATH=/root/.cargo/bin:$PATH
 
-RUN apt-get update \
+RUN sed -i -e 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
+        -e 's|security.ubuntu.com|archive.ubuntu.com|g' \
+        /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true \
+    && apt-get update \
     && apt-get install -y --no-install-recommends \
         build-essential \
         pkg-config \
