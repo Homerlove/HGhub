@@ -1,14 +1,14 @@
 [package]
-name = "huangguo-client"
+name = "hghub"
 version = "1.2.19"
-description = "HGhub · 黄果短剧客户端"
+description = "HGhub client"
 authors = ["HGhub"]
 license = "PolyForm-Noncommercial-1.0.0"
 edition = "2021"
 rust-version = "1.90"
 
 [lib]
-name = "huangguo_client_lib"
+name = "hghub_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]

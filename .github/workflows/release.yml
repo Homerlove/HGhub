@@ -86,7 +86,7 @@ jobs:
           $v = "${{ steps.ver.outputs.version }}"
           New-Item -ItemType Directory -Force artifacts | Out-Null
           Copy-Item "src-tauri/target/release/bundle/nsis/*.exe" artifacts/
-          $bin = "src-tauri/target/release/huangguo-client.exe"
+          $bin = "src-tauri/target/release/hghub.exe"
           if (-not (Test-Path $bin)) {
             $bin = (Get-ChildItem "src-tauri/target/release" -Filter *.exe | Select-Object -First 1).FullName
           }
