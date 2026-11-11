@@ -6,6 +6,7 @@ import LinePicker from "../components/LinePicker";
 import { autoLineEnabled, pickLine, setAutoLine } from "../autoLine";
 import { copyPlaybackLog, initPlaybackLog, setPlaybackLog, tracePlayback, usePlaybackLog } from "../playbackDiagnostics";
 import { formatNetDiag, shortVerdict } from "../netDiagReport";
+import { copyText } from "../clipboard";
 import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRefresh, ISettings, ISun, IVolMute, IList } from "../icons";
 
 /* 独立设置页：线路 / 外观 / 播放 / 本地数据 / 清理缓存 / 网络诊断 / 关于
@@ -24,6 +25,9 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
   const [updating, setUpdating] = useState("");
   const playbackLog = usePlaybackLog();
   const [copyingLog, setCopyingLog] = useState(false);
+  const [diagnosing, setDiagnosing] = useState(false);
+  const [diagReport, setDiagReport] = useState<string | null>(null);
+  const [copyingReport, setCopyingReport] = useState(false);
 
   const readLine = () => {
     api.lineState().then((s) => setLineBase(s.base)).catch(() => {});
@@ -54,7 +58,7 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
     try {
       await api.openUrl(update.url);
     } catch (e) {
-      navigator.clipboard?.writeText(update.url)
+      await copyText(update.url)
         .then(() => toast("下载地址已复制，可在浏览器粘贴打开", "ok"))
         .catch(() => toast((e as Error).message || "打开失败", "info"));
     } finally {
@@ -191,7 +195,8 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               />
             </div>
             {/* 打不开时先点这里：把 DNS / 代理 / HTTP 结果复制给维护者 */}
-            <button onClick={async () => {
+            <button disabled={diagnosing} onClick={async () => {
+              setDiagnosing(true);
               try {
                 const diag = await api.netDiag();
                 // 落盘走原始 JSON（便于脚本统计），复制给对方的是分段可读报告。
@@ -205,15 +210,24 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
                   dns_count: dns.count ?? null, fake_ip: dns.has_fake_ip ?? null,
                   proxy: Object.values(env).some(Boolean), strict: strictSecurity,
                 });
-                await navigator.clipboard?.writeText(formatNetDiag(diag));
-                toast(`诊断已复制 · ${shortVerdict(diag)}`, "ok");
+                const report = formatNetDiag(diag);
+                try {
+                  await copyText(report);
+                  toast(`诊断已复制 · ${shortVerdict(diag)}`, "ok");
+                } catch {
+                  setDiagReport(report);
+                  toast("诊断已完成，复制失败，可在报告中重试", "info");
+                }
               } catch (e) {
-                toast((e as Error).message || "诊断失败", "info");
+                const detail = e instanceof Error ? e.message : typeof e === "string" ? e : "请稍后重试";
+                toast(`网络诊断失败：${detail}`, "info");
+              } finally {
+                setDiagnosing(false);
               }
-            }} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
+            }} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable disabled:opacity-60">
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><ILink size={16} /></span>
               <div className="flex-1">
-                <div className="text-[12.5px] text-on">网络诊断</div>
+                <div className="text-[12.5px] text-on">{diagnosing ? "正在诊断…" : "网络诊断"}</div>
                 <div className="text-[10.5px] text-mut">DNS / TCP / 系统代理 / 官网连通性，一键复制带结论的报告</div>
               </div>
               <IChevR size={15} className="text-mut" />
@@ -271,6 +285,25 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
 
       <LinePicker open={lineOpen} onClose={() => { setLineOpen(false); readLine(); }} />
 
+      <Modal open={diagReport !== null} onClose={() => setDiagReport(null)} width={520}>
+        <div className="p-5">
+          <h2 className="text-[14.5px] font-bold text-on">网络诊断报告</h2>
+          <p className="text-[12px] text-mut mt-2">诊断已完成，自动复制未成功。可以重试复制，或在下方选择报告文字。</p>
+          <textarea readOnly aria-label="网络诊断报告" value={diagReport ?? ""}
+            className="w-full h-64 mt-3 p-3 rounded-(--r-sm) bg-s3 text-[11px] text-on resize-none" />
+          <div className="flex gap-2 mt-4">
+            <button onClick={() => setDiagReport(null)} className="flex-1 h-9 rounded-(--r-ctl) bg-s3 text-[12.5px] text-on pressable">关闭</button>
+            <button disabled={copyingReport} onClick={async () => {
+              if (diagReport === null) return;
+              setCopyingReport(true);
+              try { await copyText(diagReport); toast("网络诊断报告已复制", "ok"); setDiagReport(null); }
+              catch { toast("复制失败，请选择报告文字手动复制", "info"); }
+              finally { setCopyingReport(false); }
+            }} className="flex-1 h-9 rounded-(--r-ctl) brand-grad text-[12.5px] pressable disabled:opacity-60">{copyingReport ? "正在复制…" : "复制报告"}</button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal open={about} onClose={() => setAbout(false)} width={392}>
         <div className="p-5">
           <div className="flex items-center gap-3">
@@ -292,13 +325,13 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
           </div>
 
           <div className="mt-4 divide-y divide-s3">
-            <button onClick={() => { api.openUrl("https://github.com/zxsos/HGhub").catch(() => { navigator.clipboard?.writeText("https://github.com/zxsos/HGhub").then(() => toast("仓库地址已复制", "ok")).catch(() => {}); }); }}
+            <button onClick={() => { api.openUrl("https://github.com/zxsos/HGhub").catch(() => { copyText("https://github.com/zxsos/HGhub").then(() => toast("仓库地址已复制", "ok")).catch(() => {}); }); }}
               className="w-full flex items-center gap-2 py-2.5 text-left pressable">
               <ILink size={15} className="text-mut" />
               <span className="text-[12px] text-on/85">github.com/zxsos/HGhub</span>
               <span className="ml-auto text-[10.5px] text-primary">复制</span>
             </button>
-            <button onClick={() => { navigator.clipboard?.writeText("https://huangguoai.com").then(() => toast("站点地址已复制", "ok")).catch(() => {}); }}
+            <button onClick={() => { copyText("https://huangguoai.com").then(() => toast("站点地址已复制", "ok")).catch(() => {}); }}
               className="w-full flex items-center gap-2 py-2.5 text-left pressable">
               <ILink size={15} className="text-mut" />
               <span className="text-[12px] text-on/85">huangguoai.com</span>
