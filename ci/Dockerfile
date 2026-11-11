@@ -7,11 +7,18 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CARGO_TERM_COLOR=always \
     PATH=/root/.cargo/bin:$PATH
 
-RUN sed -i -e 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
-        -e 's|security.ubuntu.com|archive.ubuntu.com|g' \
-        /etc/apt/sources.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
+RUN set -eux; \
+    echo '--- apt sources before ---'; \
+    cat /etc/apt/sources.list.d/ubuntu.sources; \
+    sed -i \
+        -e 's|http://azure.archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+        -e 's|http://archive.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+        -e 's|http://security.ubuntu.com/ubuntu|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' \
+        /etc/apt/sources.list.d/ubuntu.sources; \
+    echo '--- apt sources after ---'; \
+    cat /etc/apt/sources.list.d/ubuntu.sources; \
+    apt-get -o Acquire::Retries=3 update; \
+    apt-get install -y --no-install-recommends \
         build-essential \
         pkg-config \
         curl \
@@ -25,8 +32,8 @@ RUN sed -i -e 's|azure.archive.ubuntu.com|archive.ubuntu.com|g' \
         libayatana-appindicator3-dev \
         librsvg2-dev \
         patchelf \
-        libxdo-dev \
-    && rm -rf /var/lib/apt/lists/*
+        libxdo-dev; \
+    rm -rf /var/lib/apt/lists/*
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --profile minimal --default-toolchain stable \
