@@ -24,6 +24,9 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
   const loadingRef = useRef(false);
+  /* 翻页失败退避：失败后 5 秒内不再因滚动触发重试，连续失败只提示一次 */
+  const retryAt = useRef(0);
+  const failStreak = useRef(0);
 
   const load = useCallback(async (p: number) => {
     if (loadingRef.current || done) return;
@@ -39,11 +42,13 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
         return [...prev, ...ordered.filter((x) => !seen.has(x.id))];
       });
       setPage(p);
+      failStreak.current = 0;
       if (!list.length || (res?.pagination && p >= res.pagination.pages)) setDone(true);
     } catch (e) {
       const message = (e as Error).message || "加载失败";
       setError(message);
-      toast(message, "info");
+      if (p > 1) retryAt.current = Date.now() + 5000;
+      if (failStreak.current++ === 0) toast(message, "info");
     } finally {
       loadingRef.current = false;
       setLoading(false);
@@ -58,7 +63,7 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
     <div className="absolute inset-0 bg-black">
       {items.length ? (
         <Feed videoIds={ids} mode="home" active={active} bottomInset={bottomInset}
-          onNearEnd={() => { if (!loading && !done) load(page + 1); }} />
+          onNearEnd={() => { if (!loading && !done && Date.now() >= retryAt.current) load(page + 1); }} />
       ) : !loading && error ? (
         <div className="absolute inset-0 flex items-center justify-center bg-bg">
           <Empty icon={<ISearch size={26} />} title="首页加载失败" sub={error} action="重试" onAction={() => void load(1)} />
