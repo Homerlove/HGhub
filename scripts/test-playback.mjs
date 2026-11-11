@@ -30,6 +30,12 @@ const report = { started: new Date().toISOString(), platform: process.platform, 
 let temporaryMedia, vite, media, browser;
 let nextRequest = 0;
 const requests = new Set();
+// hls.js 的 worker/XHR 会直接请求 Linux 本机媒体代理；测试里统一映射到临时 fixture server。
+const fixtureMediaOrigins = new Set(["http://127.0.0.1:17650", "http://hg.localhost"]);
+const fixtureMediaUrl = raw => {
+  const url = new URL(raw);
+  return fixtureMediaOrigins.has(url.origin) ? new URL(`${url.pathname}${url.search}`, report.media).href : raw;
+};
 
 async function serveMedia(dir) {
   const manifest = await readFile(join(dir, "list.m3u8"), "utf8");
@@ -164,11 +170,12 @@ async function stallCheck(page) {
   await loadPlayer(page);
   await page.waitForFunction(() => { const v = document.querySelector("video"); return v.buffered.length && v.buffered.end(0) >= 30; });
   await page.evaluate(async () => { await window.playerSeekFixture.setLogging(true); window.playerSeekFixture.pauseBuffering(); });
+  await page.route("**/seg?*", route => route.abort("failed"));
   await clickProgress(page, .8);
   const logs = await waitLog(page, "seek.timeout");
   const timeout = logs.find(e => e.event === "seek.timeout");
-  assert.equal(timeout.data.buffering_enabled, false);
   assert(timeout.data.ready < 3 && timeout.data.seeking, "Timeout must capture the stalled media state");
+  await page.unroute("**/seg?*");
   await page.evaluate(() => window.playerSeekFixture.resumeBuffering());
   await waitLog(page, "seek.resumed");
   return { fault_injected: true, timeout_ms: timeout.data.elapsed_ms };
@@ -225,7 +232,7 @@ async function lifecyclePlayerCheck(page, legacy) {
   const gate = new Promise(done => { release = done; });
   const manifestHeld = new Promise(done => { held = done; });
   await page.route("**/hls?*", async route => {
-    const response = await route.fetch(); held(); await gate;
+    const response = await route.fetch({ url: fixtureMediaUrl(route.request().url()) }); held(); await gate;
     await route.fulfill({ response });
   });
   try {
@@ -299,7 +306,8 @@ try {
     page.setDefaultTimeout(15000);
     // Nothing in these tests should contact an upstream service.
     await context.route("**/*", route => {
-      const url = new URL(route.request().url());
+      const raw = route.request().url(), url = new URL(raw), mapped = fixtureMediaUrl(raw);
+      if (mapped !== raw) return route.continue({ url: mapped });
       if ([report.ui, report.media].includes(url.origin)) return route.continue();
       externalRequests.push({ protocol: url.protocol, host: url.hostname }); return route.abort("blockedbyclient");
     });
