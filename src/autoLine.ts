@@ -128,11 +128,6 @@ export async function pickLine(reason: string, force = false): Promise<void> {
   }
 }
 
-/** 主站 host。当前就在主站上时，没必要再敲它一次。 */
-const MAIN_HOST = "huangguoai.com";
-function isMain(base: string): boolean {
-  return hostOf(base) === MAIN_HOST;
-}
 /** 当前走的是镜像时调一次：敲主站，通了就切回并提示，不通保持原状。
  *
  * 为什么必须单独做这件事：体检探的是「当前线路」，镜像自己是通的，
@@ -180,8 +175,8 @@ async function check(reason: string): Promise<void> {
     if (h.ok) {
       downStreak = 0;
       step = Math.min(step + 1, HEALTH_STEPS.length - 1);
-      // 现在待在镜像上就顺手问问主站：通了代表已经有代理 / 出了国，该回去了
-      if (!isMain(h.base)) await tryMain(reason);
+      // 顺手问问主站：通了代表已经有代理 / 出了国，该回去了
+      await tryMain(reason);
       schedule(HEALTH_STEPS[step]);
       return;
     }

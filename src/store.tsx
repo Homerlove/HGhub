@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, platform as envPlatform } from "./api";
 import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./html";
+import { appDataKey } from "./branding";
 import type { User } from "./types";
 
 export type Platform = "android" | "ios" | "windows" | "macos" | "linux";
@@ -75,7 +76,8 @@ type Persist = {
   preferHevc: boolean;
 };
 
-const LS = "hghub_app_v1";
+const LS = appDataKey("default");
+const LEGACY_LS = "hghub_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
   muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: true, preferHevc: false,
@@ -100,7 +102,7 @@ function normalizeHistory(raw: unknown): WatchProgress[] {
 
 function loadPersist(): Persist {
   try {
-    const raw = localStorage.getItem(LS);
+    const raw = localStorage.getItem(LS) ?? localStorage.getItem(LEGACY_LS);
     if (!raw) return DEFAULTS;
     const p = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Persist>) };
     // 只在启动时应用；本次使用中取消静音不会关闭此偏好。

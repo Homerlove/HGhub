@@ -22,7 +22,7 @@ export function WaterfallCard({ v, onOpen }: { v: VideoCard; onOpen: () => void 
       <div className="absolute inset-x-0 bottom-0 p-2">
         <div className="text-[11.5px] font-medium text-white leading-snug clamp-2 tsh">{v.title}</div>
         <div className="flex items-center justify-between mt-1">
-          <span className="text-[9.5px] text-white/65 truncate max-w-[60%]">{v.author?.name || "黄果短剧"}</span>
+          <span className="text-[9.5px] text-white/65 truncate max-w-[60%]">{v.author?.name || "佚名"}</span>
           <span className="flex items-center gap-0.5 text-[9.5px] text-white/75"><IHeartF size={10} className="text-white/70" />{fmt(v.like_count)}</span>
         </div>
       </div>

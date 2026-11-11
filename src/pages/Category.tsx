@@ -147,14 +147,14 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
         })}
 
         {/* 吃瓜 */}
-        <section aria-label="黄果吃瓜" className="mb-5 a-rise">
+        <section aria-label="吃瓜" className="mb-5 a-rise">
           <button onClick={() => push({ kind: "posts" })}
             className="w-full flex items-center gap-2.5 px-4 mb-2.5 text-left pressable group">
             <span className="w-[36px] h-[36px] rounded-(--r-sm) tonal flex items-center justify-center shrink-0 text-primary">
               <IGrid size={19} strokeWidth={1.9} />
             </span>
             <span className="flex-1 min-w-0">
-              <span className="block text-[15.5px] font-semibold text-on leading-tight">黄果吃瓜</span>
+              <span className="block text-[15.5px] font-semibold text-on leading-tight">吃瓜</span>
               <span className="block text-[10.5px] text-mut mt-0.5 truncate">圈内爆料 · 每日更新</span>
             </span>
             <span className="flex items-center gap-0.5 text-[11.5px] text-mut group-hover:text-primary transition-colors">
@@ -173,7 +173,7 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
                 <div className="mt-1.5 text-[11.5px] font-medium text-on clamp-1 leading-tight">{post.title}</div>
               </button>
             ))}
-            {!posts.length && <PreviewStatus name="黄果吃瓜" loading={loading.posts !== false} error={errors.posts} onRetry={() => void loadPreview("posts")} />}
+            {!posts.length && <PreviewStatus name="吃瓜" loading={loading.posts !== false} error={errors.posts} onRetry={() => void loadPreview("posts")} />}
           </div>
         </section>
 

@@ -69,7 +69,7 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
     <div className="absolute inset-0 bg-bg flex flex-col">
       <div className="shrink-0 flex items-center gap-2 px-2 bg-s1" style={{ paddingTop: "var(--sat, 0px)" }}>
         <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={19} /></button>
-        <span className="text-[14px] font-bold text-on">黄果吃瓜</span>
+        <span className="text-[14px] font-bold text-on">吃瓜</span>
         <span className="text-[10.5px] text-mut ml-1">圈内爆料</span>
         <button onClick={() => setSearching(true)} aria-label="搜索吃瓜帖" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
       </div>
