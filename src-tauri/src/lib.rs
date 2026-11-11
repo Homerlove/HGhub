@@ -8,6 +8,7 @@ mod logging;
 #[cfg(target_os = "macos")]
 mod macos_titlebar;
 mod media;
+mod media_dns;
 mod net;
 mod network_policy;
 mod playback_log;
