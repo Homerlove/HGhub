@@ -217,39 +217,4 @@ export type UpdateInfo = {
   notes?: string;
 };
 
-/** 线路（数据源）。 */
-export type LineItem = { name?: string; url: string; host?: string };
-export type LineState = { base: string; default: string; fixed: LineItem[] };
-export type LineMirrors = { source: string; script?: string; items: LineItem[]; recommended_source?: string; recommended: LineItem[] };
-export type LineProbe = { url: string; ok: boolean; status?: number; ms: number; error?: string };
-export type LineHealth = { base: string; ok: boolean; ms: number; status: number | null };
 
-/** 自动选线：只比 `.com` 与 `.ai` 两条，取通的那条、快的那条。 */
-export type LineAutoCandidate = {
-  tier: "main" | "cn" | "mirror";
-  url: string;
-  ok: boolean;
-  reachable: boolean;
-  ms: number;
-  status: number | null;
-};
-export type LineAuto = {
-  previous: string;
-  base: string;
-  switched: boolean;
-  pick: {
-    base: string;
-    tier: "main" | "cn" | "none";
-    ms: number;
-    reason: string;
-    candidates: LineAutoCandidate[];
-  };
-};
-
-/** 回切主站的探测结果：`probe.ok` 为主站到底通不通。 */
-export type LineTryMain = {
-  previous: string;
-  base: string;
-  switched: boolean;
-  probe: { ok: boolean; base: string; tier: string; ms: number; status: number | null };
-};

@@ -198,7 +198,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
   /* 分享：复制播放链接（站点地址从当前接入配置读取，不写死域名） */
   const shareLink = async () => {
-    const base = await api.lineState().then((s) => s.base).catch(() => "");
+    const base = await api.gateState().then((s) => s.base).catch(() => "");
     const u = kind === "post"
       ? (posts[curId]?.video_url || meta.title)
       : base ? `${base.replace(/\/+$/, "")}/video/${curId}/` : meta.title;
