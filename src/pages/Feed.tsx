@@ -263,22 +263,21 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const stepDir = useCallback((dir: number) => {
     if (swipeEp && kind === "video") {
       const ep = epMap[curId] || 1;
-      const total = episodes.length;
-      const want = dir === 1 ? (total === 0 || ep < total ? ep + 1 : 0) : (ep > 1 ? ep - 1 : 0);
-      if (want) {
+      const want = dir === 1 ? nextEpisodeNumber(episodes, ep) : previousEpisodeNumber(episodes, ep);
+      if (want != null) {
         setEpMap((m) => ({ ...m, [curId]: want }));
         setPanel(null);
         return;
       }
     }
     go(dir);
-  }, [swipeEp, kind, epMap, curId, episodes.length, go]);
+  }, [swipeEp, kind, epMap, curId, episodes, go]);
 
   const canStep = (dir: number) => {
     if (swipeEp && kind === "video") {
       const ep = epMap[curId] || 1;
-      const total = episodes.length;
-      if (dir === 1 ? (total === 0 || ep < total) : ep > 1) return true;
+      const exists = dir === 1 ? nextEpisodeNumber(episodes, ep) != null : previousEpisodeNumber(episodes, ep) != null;
+      if (exists) return true;
     }
     const next = index + dir;
     return next >= 0 && next < videoIds.length;
@@ -596,8 +595,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         const dir = dy < 0 ? 1 : -1;
         const ep = epMap[curId] || 1;
         const total = episodes.length;
-        const want = dir === 1 ? (total === 0 || ep < total ? ep + 1 : 0) : (ep > 1 ? ep - 1 : 0);
-        if (swipeEp && kind === "video" && want) {
+        const want = dir === 1 ? nextEpisodeNumber(episodes, ep) : previousEpisodeNumber(episodes, ep);
+        if (swipeEp && kind === "video" && want != null) {
           setEpMap((m) => ({ ...m, [curId]: want }));
           toast(`第 ${want}集${total ? ` / ${total}` : ""}`, "info");
           try { navigator.vibrate?.(12); } catch { /* ignore */ }
@@ -838,6 +837,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     return <div className="absolute inset-0 bg-black flex items-center justify-center"><div className="w-9 h-9 spinner" /></div>;
   }
 
+  const nextEp = episodes.length ? nextEpisodeNumber(episodes, curEp) : null;
+
   return (
     <div
       className={`hg-player-ui ${rotated ? "fs-landscape" : (!isDesktop && fs ? "fs-immersive" : "absolute inset-0")} overflow-hidden bg-black player-root ${controlsLocked ? "is-locked" : ""} ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${isDesktop && idle ? "is-idle" : ""}`}
@@ -871,10 +872,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onPlaying={() => { setPaused(false); setWaiting(false); }}
                   onPause={() => setPaused(true)}
                   onWaiting={() => setWaiting(true)}
-                  onEnded={() => {
-                    const next = episodes.filter((e) => e.ep_num > curEp).sort((a, b) => a.ep_num - b.ep_num)[0];
-                    if (next) pickEp(next.ep_num);
-                  }}
+                  onEnded={() => { if (nextEp != null) pickEp(nextEp); }}
                   onError={(m) => {
                     setErr(m);
                     if (preferHevc && hevcUrl) {
@@ -1180,8 +1178,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           visible={active && !idle}
           seekEnabled={active && !controlsLocked}
           seekKey={playKey}
-          nextDisabled={!episodes.some((e) => e.ep_num === curEp + 1) && index >= videoIds.length - 1}
-          nextTitle={episodes.some((e) => e.ep_num === curEp + 1) ? "下一集 E" : "下一部 ↓"}
+          nextDisabled={nextEp == null && index >= videoIds.length - 1}
+          nextTitle={nextEp != null ? "下一集 E" : "下一部 ↓"}
           swipeEp={swipeEp}
           onToggleSwipe={() => { setSwipeEp(!swipeEp); toast(swipeEp ? "上下划切集已关闭" : "上下划切集已开启"); }}
           onToggle={() => videoRef.current?.toggle()}
@@ -1195,8 +1193,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           onTheater={() => setTheater((v) => !v)}
           onFullscreen={toggleFull}
           onNext={() => {
-            const nx = episodes.find((e) => e.ep_num === curEp + 1);
-            if (nx) pickEp(nx.ep_num);
+            if (nextEp != null) pickEp(nextEp);
             else go(1);
           }}
         />
@@ -1275,10 +1272,10 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               className={`ml-auto shrink-0 flex items-center gap-1 px-2.5 h-8 rounded-full text-[12px] font-bold pressable ${effRate !== 1 ? "bg-primary text-on-primary" : "hg-chip hg-ink-2"}`}>
               <IBoltF size={12} />{effRate}x
             </button>
-            {curEp < episodes.length && (
-              <button onClick={() => pickEp(curEp + 1)}
+            {nextEp != null && (
+              <button onClick={() => pickEp(nextEp)}
                 className="shrink-0 flex items-center gap-1 px-2.5 h-8 rounded-full text-[12px] font-semibold hg-chip hg-ink-2 pressable"
-                aria-label={`下一集 第${curEp + 1}集`}>
+                aria-label={`下一集 第${nextEp}集`}>
                 <IVertSwap size={12} />下集
               </button>
             )}
