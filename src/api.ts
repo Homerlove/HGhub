@@ -141,9 +141,15 @@ export const api = {
     call<Paged<VideoCard>>("api_category", { cate, page, size }),
   rank: (kind: "hot" | "recommend" | "potential") =>
     call<{ type: string; items: RankItem[] }>("api_rank", { kind }),
-  search: (q: string, page = 1, size = 20) =>
+  /** 全站搜索。`kind` 省略时后端只搜短剧；吃瓜帖要显式传 "post"（issue #34）。 */
+  search: (q: string, page = 1, size = 20, kind?: "video" | "post") =>
     call<{ items: VideoCard[]; pagination: Paged<VideoCard>["pagination"]; keyword: string }>(
-      "api_search", { q, page, size },
+      "api_search", { q, page, size, kind: kind ?? null },
+    ),
+  /** 只搜吃瓜帖：返回结构是 Post 而不是 VideoCard。 */
+  searchPosts: (q: string, page = 1, size = 20) =>
+    call<{ items: Post[]; pagination: Paged<Post>["pagination"]; keyword: string }>(
+      "api_search", { q, page, size, kind: "post" },
     ),
   searchHot: () => call<{ items: HotWord[] }>("api_search_hot"),
   posts: (page = 1, size = 20) => call<Paged<Post>>("api_posts", { page, size }),

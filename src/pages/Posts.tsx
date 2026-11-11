@@ -9,7 +9,7 @@ import { handleArticleClick, sanitizeHtml } from "../html";
 
 /* ================= 吃瓜列表 ================= */
 export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
-  const { push, pop, setTab } = useStore();
+  const { push, pop, setTab, setSearchScope } = useStore();
   const [cats, setCats] = useState<PostCategory[]>([]);
   const [cat, setCat] = useState<string>(""); // 空 = 全部
   const [items, setItems] = useState<Post[]>([]);
@@ -68,7 +68,7 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
         <button onClick={onBack} className="w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={19} /></button>
         <span className="text-[14px] font-bold text-on">黄果吃瓜</span>
         <span className="text-[10.5px] text-mut ml-1">圈内爆料</span>
-        <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+        <button onClick={() => { setSearchScope("post"); pop(); setTab("search"); }} aria-label="搜索吃瓜帖" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
       </div>
       {cats.length > 0 && (
         <div className="shrink-0 flex gap-2 px-4 py-2.5 overflow-x-auto no-bar">
