@@ -17,7 +17,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export default function Home({ active, bottomInset }: { active: boolean; bottomInset: number }) {
-  const { toast } = useStore();
+  const { toast, lineEpoch } = useStore();
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -27,9 +27,15 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
   /* 翻页失败退避：失败后 5 秒内不再因滚动触发重试，连续失败只提示一次 */
   const retryAt = useRef(0);
   const failStreak = useRef(0);
+  const lineEpochRef = useRef(lineEpoch);
+  lineEpochRef.current = lineEpoch;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
 
-  const load = useCallback(async (p: number) => {
-    if (loadingRef.current || done) return;
+  const load = useCallback(async (p: number): Promise<void> => {
+    if (loadingRef.current || (done && p > 1)) return;
+    const requestEpoch = lineEpochRef.current;
+    let retryAfterLineChange = false;
     loadingRef.current = true;
     setLoading(true);
     setError("");
@@ -47,16 +53,36 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
       if (!list.length || (res?.pagination && p >= res.pagination.pages)) setDone(true);
     } catch (e) {
       const message = (e as Error).message || "加载失败";
-      setError(message);
-      if (p > 1) retryAt.current = Date.now() + 5000;
-      if (failStreak.current++ === 0) toast(message, "info");
+      const stale = requestEpoch !== lineEpochRef.current;
+      if (!stale) {
+        setError(message);
+        if (p > 1) retryAt.current = Date.now() + 5000;
+        if (failStreak.current++ === 0) toast(message, "info");
+      }
+      /* 请求在旧线路上发出、期间线路已切换：等 finally 里用新线路补拉一次 */
+      if (stale && !itemsRef.current.length) retryAfterLineChange = true;
     } finally {
       loadingRef.current = false;
       setLoading(false);
+      if (retryAfterLineChange) {
+        setDone(false);
+        setError("");
+        void load(1);
+      }
     }
   }, [done, toast]);
 
   useEffect(() => { if (!items.length) load(1); /* eslint-disable-next-line */ }, []);
+
+  /* 线路切换后：首页还没拿到数据（加载失败或空）就在新线路上重拉一次。
+     已有数据时不动，避免打断正在播放的视频。 */
+  useEffect(() => {
+    if (!lineEpoch || items.length || loadingRef.current) return;
+    setDone(false);
+    setError("");
+    void load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineEpoch]);
 
   const ids = items.map((v) => v.id);
 

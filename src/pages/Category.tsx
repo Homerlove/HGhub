@@ -16,7 +16,7 @@ export const CHANNELS = [
 
 /* ================= 分类总览 ================= */
 export default function Category({ wide, active }: { wide: boolean; active: boolean }) {
-  const { push } = useStore();
+  const { push, lineEpoch } = useStore();
   const [rows, setRows] = useState<Record<string, VideoCard[]>>({});
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -24,14 +24,20 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
   const mounted = useRef(false);
   const started = useRef(false);
   const pending = useRef(new Set<string>());
+  const errorsRef = useRef(errors);
+  errorsRef.current = errors;
+  const lineEpochRef = useRef(lineEpoch);
+  lineEpochRef.current = lineEpoch;
+  const retryKeys = useRef(new Set<string>());
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
 
-  const loadPreview = useCallback(async (key: string) => {
+  const loadPreview = useCallback(async (key: string): Promise<void> => {
     if (pending.current.has(key)) return;
+    const requestEpoch = lineEpochRef.current;
     pending.current.add(key);
     setLoading(m => ({ ...m, [key]: true }));
     setErrors(m => ({ ...m, [key]: "" }));
@@ -44,10 +50,15 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
         if (mounted.current) setRows(m => ({ ...m, [key]: result?.items || [] }));
       }
     } catch (error) {
-      if (mounted.current) setErrors(m => ({ ...m, [key]: (error as Error).message || "加载失败" }));
+      const stale = requestEpoch !== lineEpochRef.current;
+      if (mounted.current && !stale) setErrors(m => ({ ...m, [key]: (error as Error).message || "加载失败" }));
+      /* 请求在旧线路上发出、期间线路已切换：等 finally 里用新线路补拉一次 */
+      if (stale) retryKeys.current.add(key);
     } finally {
       pending.current.delete(key);
       if (mounted.current) setLoading(m => ({ ...m, [key]: false }));
+      const retry = retryKeys.current.delete(key);
+      if (retry && mounted.current) void loadPreview(key);
     }
   }, []);
 
@@ -58,6 +69,12 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
     CHANNELS.forEach(c => { void loadPreview(c.cate); });
     void loadPreview("posts");
   }, [active, loadPreview]);
+
+  /* 线路切换后：已打开过的分类里，加载失败的栏目在新线路上重试一次 */
+  useEffect(() => {
+    if (!lineEpoch || !started.current) return;
+    Object.entries(errorsRef.current).forEach(([key, msg]) => { if (msg) void loadPreview(key); });
+  }, [lineEpoch, loadPreview]);
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
