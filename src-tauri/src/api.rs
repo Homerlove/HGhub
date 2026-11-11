@@ -142,6 +142,57 @@ async fn probe_health() -> Value {
     })
 }
 
+/* ───────────────────────── 更新检查 ───────────────────────── */
+
+const REPO: &str = "zxsos/HGhub";
+
+fn ver_parts(v: &str) -> Vec<u64> {
+    v.trim()
+        .trim_start_matches(['v', 'V'])
+        .split(['.', '-', '+'])
+        .map(|s| s.trim().parse::<u64>().unwrap_or(0))
+        .collect()
+}
+
+/// 只比较数字段：`v1.2.0` > `1.1.9`；解析不出的段按 0 处理。
+fn is_newer(latest: &str, current: &str) -> bool {
+    let (a, b) = (ver_parts(latest), ver_parts(current));
+    for i in 0..a.len().max(b.len()) {
+        let x = *a.get(i).unwrap_or(&0);
+        let y = *b.get(i).unwrap_or(&0);
+        if x != y {
+            return x > y;
+        }
+    }
+    false
+}
+
+/// 从 tag / name 里取出 `x.y.z`。
+fn version_in(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if !chars[i].is_ascii_digit() {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut dots = 0;
+        let mut j = i;
+        while j < chars.len() && (chars[j].is_ascii_digit() || (chars[j] == '.' && dots < 2)) {
+            if chars[j] == '.' {
+                dots += 1;
+            }
+            j += 1;
+        }
+        if dots == 2 {
+            return chars[start..j].iter().collect();
+        }
+        i = j.max(i + 1);
+    }
+    String::new()
+}
+
 /// 对比 GitHub Release 的 tag 与当前版本（未认证 60 次/小时/IP，够用）。
 #[tauri::command]
 pub async fn check_update() -> Result<Value, String> {
