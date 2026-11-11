@@ -136,16 +136,18 @@ jobs:
       - name: Point apt at Tsinghua mirror
         run: |
           set -euo pipefail
-          sudo sed -i -E \
-            -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-            /etc/apt/sources.list.d/ubuntu.sources
+          RE='s#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g'
+          if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then
+            sudo sed -i -E -e "$RE" /etc/apt/sources.list.d/ubuntu.sources
+          fi
+          if [ -f /etc/apt/sources.list ]; then
+            sudo sed -i -E -e "$RE" /etc/apt/sources.list
+          fi
           if [ -f /etc/apt/apt-mirrors.txt ]; then
-            sudo sed -i -E \
-              -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-              /etc/apt/apt-mirrors.txt
+            sudo sed -i -E -e "$RE" /etc/apt/apt-mirrors.txt
           fi
           echo "arch=$(dpkg --print-architecture)"
-          grep -Rhn -E 'URIs|archive|tuna' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt || true
+          grep -Rhn -E 'URIs|archive|tuna' /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt || true
 
       - name: Install system dependencies
         run: |
