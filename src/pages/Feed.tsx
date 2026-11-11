@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { api, cover, fmt, fmtTime, isMobile, logLine, mediaUrl } from "../api";
 import type { Detail, Episode, Post, VideoCard } from "../types";
 import { useStore } from "../store";
@@ -653,7 +652,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     wake();
     keepAlive();
     if (!isDesktop) {
-      try { void invoke("set_orientation", { landscape }); } catch { /* ignore */ }
+      try { void api.setOrientation(landscape); } catch { /* ignore */ }
       if (landscape) {
         try {
           (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.("landscape")?.catch(() => {});
@@ -667,7 +666,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     setFs(false);
     keepAlive();
     if (!isDesktop) {
-      try { void invoke("set_orientation", { landscape: false }); } catch { /* ignore */ }
+      try { void api.setOrientation(false); } catch { /* ignore */ }
       try { screen.orientation?.unlock?.(); } catch { /* ignore */ }
     }
   }, [isDesktop, keepAlive, setClean, setFs]);
@@ -675,7 +674,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 若用户在视频首帧宽高解析出来前已点进全屏，解析出横屏后自动补发横屏方向请求 */
   useEffect(() => {
     if (isDesktop || !fs || !landscapeVideo) return;
-    try { void invoke("set_orientation", { landscape: true }); } catch { /* ignore */ }
+    try { void api.setOrientation(true); } catch { /* ignore */ }
     try {
       (screen.orientation as unknown as { lock?: (o: string) => Promise<void> })?.lock?.("landscape")?.catch(() => {});
     } catch { /* ignore */ }
@@ -871,7 +870,10 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onPlaying={() => { setPaused(false); setWaiting(false); }}
                   onPause={() => setPaused(true)}
                   onWaiting={() => setWaiting(true)}
-                  onEnded={() => { const next = episodes.find((e) => e.ep_num === curEp + 1); if (next) pickEp(next.ep_num); }}
+                  onEnded={() => {
+                    const next = episodes.filter((e) => e.ep_num > curEp).sort((a, b) => a.ep_num - b.ep_num)[0];
+                    if (next) pickEp(next.ep_num);
+                  }}
                   onError={(m) => {
                     setErr(m);
                     if (preferHevc && hevcUrl) {

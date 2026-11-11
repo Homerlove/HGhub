@@ -193,6 +193,8 @@ export const api = {
 
   clearCache: () => invoke<void>("cache_clear"),
   netDiag: () => invoke<Record<string, unknown>>("net_diag"),
+  /** 系统方向请求；页面不直接 invoke，统一从 api 门面走。 */
+  setOrientation: (landscape: boolean) => invoke<void>("set_orientation", { landscape }),
   postLike: (id: number, on: boolean) => call<unknown>("api_post_like", { id, on }),
   postCollect: (id: number, on: boolean) => call<unknown>("api_post_collect", { id, on }),
   postComments: (id: number, page: number, size: number) => call<CommentPage>("api_post_comments", { id, page, size }),
