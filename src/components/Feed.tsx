@@ -318,6 +318,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   useEffect(() => {
     if (!curId || kind !== "video") return;
     let alive = true;
+    setRelated([]);
     api.related(curId).then((r) => { if (alive) setRelated(r?.items || []); }).catch(() => {});
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
