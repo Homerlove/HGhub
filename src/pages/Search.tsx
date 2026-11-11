@@ -19,6 +19,8 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
   const [err, setErr] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const busy = useRef(false);
+  /* 请求序号：新关键词或清空时自增，过期请求的结果直接丢弃 */
+  const seqRef = useRef(0);
   const [hotWords, setHotWords] = useState<HotWord[]>([]);
 
   /* 移动端进入搜索页不自动聚焦：iOS 会立刻弹键盘遮住内容（#20）。
@@ -35,12 +37,13 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
   }, [active]);
 
   const run = async (keyword: string, p: number) => {
-    if (busy.current) return;
-    if (p > pages && p > 1) return;
+    if (p > 1 && (busy.current || p > pages)) return;
+    const seq = p === 1 ? ++seqRef.current : seqRef.current;
     busy.current = true;
     setLoading(true);
     try {
       const res = await api.search(keyword, p, 20);
+      if (seq !== seqRef.current) return;
       setItems((prev) => {
         const base = p === 1 ? [] : prev;
         const seen = new Set(base.map((x) => x.id));
@@ -50,10 +53,13 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
       setPages(res?.pagination?.pages || 1);
       setErr(null);
     } catch (e) {
+      if (seq !== seqRef.current) return;
       setErr((e as Error).message || "搜索失败");
     } finally {
-      busy.current = false;
-      setLoading(false);
+      if (seq === seqRef.current) {
+        busy.current = false;
+        setLoading(false);
+      }
     }
   };
 
@@ -78,7 +84,7 @@ export default function Search({ active, wide }: { active: boolean; wide: boolea
           <ISearch size={17} className="text-mut shrink-0" />
           <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索短剧、作者、题材…"
             className="flex-1 min-w-0 bg-transparent text-[13.5px] text-on placeholder-dim outline-none" />
-          {q && <button type="button" onClick={() => { setQ(""); setSubmitted(""); setItems([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
+          {q && <button type="button" onClick={() => { seqRef.current++; busy.current = false; setLoading(false); setQ(""); setSubmitted(""); setItems([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
         </form>
         <button onClick={() => push({ kind: "ranks" })} aria-label="排行榜"
           className="w-11 h-11 rounded-(--r-sm) flex items-center justify-center bg-primary text-on-primary pressable elev-2">

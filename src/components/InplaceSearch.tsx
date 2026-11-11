@@ -23,15 +23,19 @@ export function InplaceSearch({ kind, onOpenVideo, onOpenPost, onClose, wide }: 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const busy = useRef(false);
+  /* 请求序号：新关键词或清空时自增，过期请求的结果直接丢弃 */
+  const seqRef = useRef(0);
 
   const run = async (keyword: string, p: number) => {
-    if (busy.current) return;
+    if (p > 1 && busy.current) return;
+    const seq = p === 1 ? ++seqRef.current : seqRef.current;
     busy.current = true;
     setLoading(true);
     try {
       const res = kind === "post"
         ? await api.searchPosts(keyword, p, 20)
         : await api.search(keyword, p, 20, "video");
+      if (seq !== seqRef.current) return;
       if (kind === "post") {
         const list = (res?.items || []) as unknown as Post[];
         setPosts((prev) => {
@@ -51,10 +55,13 @@ export function InplaceSearch({ kind, onOpenVideo, onOpenPost, onClose, wide }: 
       setPages(res?.pagination?.pages || 1);
       setErr(null);
     } catch (e) {
+      if (seq !== seqRef.current) return;
       setErr((e as Error).message || "搜索失败");
     } finally {
-      busy.current = false;
-      setLoading(false);
+      if (seq === seqRef.current) {
+        busy.current = false;
+        setLoading(false);
+      }
     }
   };
 
@@ -80,7 +87,7 @@ export function InplaceSearch({ kind, onOpenVideo, onOpenPost, onClose, wide }: 
           <ISearch size={16} className="text-mut shrink-0" />
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={kind === "post" ? "搜索吃瓜帖…" : "搜索短剧…"}
             className="flex-1 min-w-0 bg-transparent text-[13px] text-on placeholder-dim outline-none" />
-          {q && <button type="button" onClick={() => { setQ(""); setSubmitted(""); setItems([]); setPosts([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
+          {q && <button type="button" onClick={() => { seqRef.current++; busy.current = false; setLoading(false); setQ(""); setSubmitted(""); setItems([]); setPosts([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
         </form>
       </div>
 
