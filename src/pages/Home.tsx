@@ -43,6 +43,7 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
       });
       setPage(p);
       failStreak.current = 0;
+      retryAt.current = 0;
       if (!list.length || (res?.pagination && p >= res.pagination.pages)) setDone(true);
     } catch (e) {
       const message = (e as Error).message || "加载失败";
