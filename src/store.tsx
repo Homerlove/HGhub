@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, platform as envPlatform } from "./api";
-import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./html";
+import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity, setSiteBase } from "./html";
+import { appDataKey } from "./branding";
 import type { User } from "./types";
 
 export type Platform = "android" | "ios" | "windows" | "macos" | "linux";
@@ -75,7 +76,8 @@ type Persist = {
   preferHevc: boolean;
 };
 
-const LS = "hghub_app_v1";
+const LS = appDataKey("default");
+const LEGACY_LS = "hghub_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
   muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: true, preferHevc: false,
@@ -100,7 +102,7 @@ function normalizeHistory(raw: unknown): WatchProgress[] {
 
 function loadPersist(): Persist {
   try {
-    const raw = localStorage.getItem(LS);
+    const raw = localStorage.getItem(LS) ?? localStorage.getItem(LEGACY_LS);
     if (!raw) return DEFAULTS;
     const p = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Persist>) };
     // 只在启动时应用；本次使用中取消静音不会关闭此偏好。
@@ -200,6 +202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     api.boot()
       .then((r) => {
         if (r.user && (r.user as User).id) setUser(r.user as User);
+        setSiteBase(r.base);
         if (typeof r.strict_security === "boolean") {
           setStrictSecurityState(r.strict_security);
           setHtmlStrictSecurity(r.strict_security);
@@ -264,7 +267,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
    * 挂载时拉一次，所以这里给一个递增的 key，让它们重挂载、重新请求。
    */
   useEffect(() => {
-    const bump = () => setLineEpoch((n) => n + 1);
+    const bump = () => {
+      setLineEpoch((n) => n + 1);
+      api.lineState().then((s) => setSiteBase(s.base)).catch(() => {});
+    };
     window.addEventListener("hg:line-changed", bump);
     return () => window.removeEventListener("hg:line-changed", bump);
   }, []);

@@ -167,7 +167,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         title: post?.title || "",
         cover: post?.cover || "",
         desc: post?.content || post?.desc || "",
-        author: "黄果吃瓜",
+        author: "匿名用户",
         authorId: -1,
         tags: post?.tags || [],
         score: 0,
@@ -180,7 +180,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         title: detail?.title || cards[curId]?.title || "",
         cover: detail?.cover || cards[curId]?.cover || "",
         desc: detail?.description || "",
-        author: detail?.author?.name || "黄果短剧",
+        author: detail?.author?.name || "佚名",
         authorId: detail?.author?.id || -1,
         tags: detail?.tags || [],
         score: detail?.score || 0,
@@ -194,9 +194,12 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const hasVideo = kind === "video" || !!post?.video_url;
   const articleHtml = kind === "post" && !hasVideo ? (post?.content || "") : "";
 
-  /* 分享：复制播放链接 */
-  const shareLink = () => {
-    const u = kind === "post" ? (posts[curId]?.video_url || meta.title) : `https://huangguoai.com/video/${curId}/`;
+  /* 分享：复制播放链接（站点地址从当前接入配置读取，不写死域名） */
+  const shareLink = async () => {
+    const base = await api.lineState().then((s) => s.base).catch(() => "");
+    const u = kind === "post"
+      ? (posts[curId]?.video_url || meta.title)
+      : base ? `${base.replace(/\/+$/, "")}/video/${curId}/` : meta.title;
     copyText(u).then(() => toast("链接已复制", "ok")).catch(() => toast("复制失败", "info"));
   };
 

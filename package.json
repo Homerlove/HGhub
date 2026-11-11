@@ -1,5 +1,5 @@
 {
-  "name": "huangguo-client",
+  "name": "hghub",
   "private": true,
   "version": "1.2.19",
   "license": "PolyForm-Noncommercial-1.0.0",
@@ -13,6 +13,7 @@
     "test:channel-pagination": "node scripts/test-channel-pagination.mjs",
     "test:mobile-layout": "node scripts/test-mobile-layout.mjs",
     "test:diagnostic-copy": "node scripts/test-diagnostic-copy.mjs",
+    "test:brand-neutral": "node scripts/test-brand-neutral.mjs",
     "tauri": "tauri",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
