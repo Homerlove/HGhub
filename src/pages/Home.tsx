@@ -17,7 +17,7 @@ function shuffle<T>(arr: T[]): T[] {
 }
 
 export default function Home({ active, bottomInset }: { active: boolean; bottomInset: number }) {
-  const { toast } = useStore();
+  const { toast, lineEpoch } = useStore();
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -29,7 +29,7 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
   const failStreak = useRef(0);
 
   const load = useCallback(async (p: number) => {
-    if (loadingRef.current || done) return;
+    if (loadingRef.current || (done && p > 1)) return;
     loadingRef.current = true;
     setLoading(true);
     setError("");
@@ -57,6 +57,16 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
   }, [done, toast]);
 
   useEffect(() => { if (!items.length) load(1); /* eslint-disable-next-line */ }, []);
+
+  /* 线路切换后：首页还没拿到数据（加载失败或空）就在新线路上重拉一次。
+     已有数据时不动，避免打断正在播放的视频。 */
+  useEffect(() => {
+    if (!lineEpoch || items.length || loadingRef.current) return;
+    setDone(false);
+    setError("");
+    void load(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineEpoch]);
 
   const ids = items.map((v) => v.id);
 

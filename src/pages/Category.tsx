@@ -16,7 +16,7 @@ export const CHANNELS = [
 
 /* ================= 分类总览 ================= */
 export default function Category({ wide, active }: { wide: boolean; active: boolean }) {
-  const { push } = useStore();
+  const { push, lineEpoch } = useStore();
   const [rows, setRows] = useState<Record<string, VideoCard[]>>({});
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -24,6 +24,8 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
   const mounted = useRef(false);
   const started = useRef(false);
   const pending = useRef(new Set<string>());
+  const errorsRef = useRef(errors);
+  errorsRef.current = errors;
 
   useEffect(() => {
     mounted.current = true;
@@ -58,6 +60,12 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
     CHANNELS.forEach(c => { void loadPreview(c.cate); });
     void loadPreview("posts");
   }, [active, loadPreview]);
+
+  /* 线路切换后：已打开过的分类里，加载失败的栏目在新线路上重试一次 */
+  useEffect(() => {
+    if (!lineEpoch || !started.current) return;
+    Object.entries(errorsRef.current).forEach(([key, msg]) => { if (msg) void loadPreview(key); });
+  }, [lineEpoch, loadPreview]);
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
