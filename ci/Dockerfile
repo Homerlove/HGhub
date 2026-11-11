@@ -4,8 +4,10 @@
 FROM mcr.microsoft.com/playwright:v1.63.0-noble
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
     CARGO_TERM_COLOR=always \
-    PATH=/root/.cargo/bin:$PATH
+    PATH=/usr/local/cargo/bin:$PATH
 
 RUN set -eux; \
     echo '--- apt sources before ---'; \
