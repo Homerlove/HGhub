@@ -36,7 +36,7 @@ if [[ ! -s "$ADDR_FILE" ]]; then
   exit 1
 fi
 
-# 工程名 / scheme 动态取（我们的 productName 是 HGhub，上游是 huangguo-client）
+# 工程名 / scheme 动态取（我们的 productName 是 HghubX）
 PROJECT="$(cd src-tauri/gen/apple && ls -d *.xcodeproj | head -1)"
 SCHEME="$(cd src-tauri/gen/apple && xcodebuild -list -project "$PROJECT" 2>/dev/null | awk '/Schemes:/{f=1;next} f&&NF{print $1;exit}')"
 if [[ -z "$PROJECT" || -z "$SCHEME" ]]; then
