@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api, cover, fmt, isMobile } from "../api";
 import type { Post, PostCategory } from "../types";
 import { useStore } from "../store";
+import { copyText } from "../clipboard";
 import { Empty, Img } from "../components/ui";
 import Player from "../components/Player";
 import { IBack, IFireF, IPlayF, ISearch } from "../icons";
@@ -133,7 +134,7 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
   const safeHtml = useMemo(() => sanitizeHtml(content), [content, strictSecurity]);
   const openSafeLink = (url: string) => {
     api.openUrl(url).catch(() => {
-      navigator.clipboard?.writeText(url).then(() => toast("链接已复制", "ok")).catch(() => {});
+      copyText(url).then(() => toast("链接已复制", "ok")).catch(() => toast("复制失败", "info"));
     });
   };
 
