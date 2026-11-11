@@ -638,16 +638,26 @@ pub async fn api_rank(state: State<'_, Api>, kind: String) -> Result<Value, Stri
     state.get(&format!("/api/ranks/{kind}")).await
 }
 
+/// 全站搜索：`/api/search?q=...&type=video|post`。
+///
+/// `type` 省略时后端默认只搜短剧；吃瓜帖必须显式传 `type=post`，
+/// 否则搜「吃瓜频道关键词」永远是空结果（issue #34）。
 #[tauri::command]
 pub async fn api_search(
     state: State<'_, Api>,
     q: String,
     page: u32,
     size: u32,
+    kind: Option<String>,
 ) -> Result<Value, String> {
     let encoded: String = url::form_urlencoded::byte_serialize(q.as_bytes()).collect();
+    let scope = match kind.as_deref() {
+        Some("post") => "&type=post",
+        Some("video") => "&type=video",
+        _ => "",
+    };
     state
-        .get(&format!("/api/search?q={encoded}&page={page}&size={size}"))
+        .get(&format!("/api/search?q={encoded}&page={page}&size={size}{scope}"))
         .await
 }
 

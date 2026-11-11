@@ -8,7 +8,7 @@ import { IBack, IGrid, ISearch, IUser } from "../icons";
 
 /* ================= 关注流 ================= */
 export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
-  const { push, user, setLoginOpen, toast, pop, setTab } = useStore();
+  const { push, user, setLoginOpen, toast, pop, setTab, setSearchScope } = useStore();
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
@@ -62,7 +62,7 @@ export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: bool
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[17px] font-bold text-on">关注</span>
           <span className="text-[10.5px] text-mut">{items.length} 部</span>
-          <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
       </div>
 
@@ -89,7 +89,7 @@ export function FollowingPage({ onBack, wide }: { onBack: () => void; wide: bool
 
 /* ================= 用户主页 ================= */
 export function UserPage({ id, name, onBack, wide }: { id: number; name?: string; onBack: () => void; wide: boolean }) {
-  const { push, toast, follows, toggleFollowLocal, user, setLoginOpen, pop, setTab } = useStore();
+  const { push, toast, follows, toggleFollowLocal, user, setLoginOpen, pop, setTab, setSearchScope } = useStore();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [stats, setStats] = useState<{ followers?: number; video_count?: number; post_count?: number; like_count?: number }>({});
   const [items, setItems] = useState<VideoCard[]>([]);
@@ -154,7 +154,7 @@ export function UserPage({ id, name, onBack, wide }: { id: number; name?: string
         <div className="px-3 pt-2 pb-3 flex items-center gap-2.5">
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[16px] font-bold text-on truncate">{profile?.nickname || name || "用户主页"}</span>
-          <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
       </div>
 

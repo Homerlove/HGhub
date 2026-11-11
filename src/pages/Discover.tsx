@@ -11,7 +11,7 @@ const TagIcon = IGlobe;
 
 /* ================= 专题列表页 ================= */
 export function TopicsPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
-  const { push, toast, pop, setTab } = useStore();
+  const { push, toast, pop, setTab, setSearchScope } = useStore();
   const [items, setItems] = useState<TopicCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -34,7 +34,7 @@ export function TopicsPage({ onBack, wide }: { onBack: () => void; wide: boolean
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[17px] font-bold text-on">专题</span>
           <span className="text-[10.5px] text-mut">{items.length} 个专辑</span>
-          <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
           <button onClick={load} className="w-9 h-9 rounded-full flex items-center justify-center text-mut hover:bg-s3 pressable"><IRefresh size={16} /></button>
         </div>
       </div>
@@ -74,7 +74,7 @@ export function TopicsPage({ onBack, wide }: { onBack: () => void; wide: boolean
 
 /* ================= 专题详情页 ================= */
 export function TopicPage({ slug, name, onBack, wide }: { slug: string; name: string; onBack: () => void; wide: boolean }) {
-  const { push, toast, pop, setTab } = useStore();
+  const { push, toast, pop, setTab, setSearchScope } = useStore();
   const [topic, setTopic] = useState<TopicCard | null>(null);
   const [related, setRelated] = useState<TopicCard[]>([]);
   const [videos, setVideos] = useState<VideoCard[]>([]);
@@ -121,7 +121,7 @@ export function TopicPage({ slug, name, onBack, wide }: { slug: string; name: st
             <div className="text-[16px] font-bold text-on truncate">{topic?.title || name}</div>
             <div className="text-[10.5px] text-mut">{topic?.video_count ?? 0} 部 · {videos.length} 已加载</div>
           </div>
-          <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
         {topic?.intro && <div className="px-4 pb-3 text-[11.5px] text-mut leading-relaxed clamp-3">{topic.intro}</div>}
       </div>
@@ -165,7 +165,7 @@ export function TopicPage({ slug, name, onBack, wide }: { slug: string; name: st
 
 /* ================= 标签聚合页 ================= */
 export function TagsPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
-  const { push, toast, pop, setTab } = useStore();
+  const { push, toast, pop, setTab, setSearchScope } = useStore();
   const [groups, setGroups] = useState<TagGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
@@ -187,7 +187,7 @@ export function TagsPage({ onBack, wide }: { onBack: () => void; wide: boolean }
         <div className="px-3 pt-2 pb-3 flex items-center gap-2.5">
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[17px] font-bold text-on">标签</span>
-          <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
           <button onClick={load} className="w-9 h-9 rounded-full flex items-center justify-center text-mut hover:bg-s3 pressable"><IRefresh size={16} /></button>
         </div>
       </div>
@@ -226,7 +226,7 @@ export function TagsPage({ onBack, wide }: { onBack: () => void; wide: boolean }
 
 /* ================= 标签视频页 ================= */
 export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string; onBack: () => void; wide: boolean }) {
-  const { push, toast, pop, setTab } = useStore();
+  const { push, toast, pop, setTab, setSearchScope } = useStore();
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
@@ -276,7 +276,7 @@ export function TagPage({ tag, name, onBack, wide }: { tag: string; name: string
           <button onClick={onBack} className="w-10 h-10 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><IBack size={20} /></button>
           <span className="text-[16px] font-bold text-on">{name}</span>
           <span className="text-[10.5px] text-mut">{items.length} 部</span>
-          <button onClick={() => { pop(); setTab("search"); }} aria-label="搜索" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
+          <button onClick={() => { setSearchScope("video"); pop(); setTab("search"); }} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
       </div>
 
