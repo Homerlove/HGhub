@@ -92,6 +92,14 @@ jobs:
             echo "test:channel-pagination not present on this branch yet; skipped until PR #48 lands"
           fi
 
+      - name: Brand neutrality
+        run: |
+          if node -e "process.exit(require('./package.json').scripts['test:brand-neutral'] ? 0 : 1)"; then
+            pnpm test:brand-neutral
+          else
+            echo "test:brand-neutral not present on this branch yet; skipped until the branding PR registers it"
+          fi
+
       - name: API loading states
         run: pnpm test:api-loading
 
