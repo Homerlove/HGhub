@@ -69,7 +69,7 @@ try {
   await page.waitForFunction(() => window.diagnosticCopyFixture.nativeCopies.length === 1);
   const first = await page.evaluate(() => window.diagnosticCopyFixture);
   assert.equal(first.webCopies, 0);
-  assert(first.nativeCopies[0].includes("【HGhub 网络诊断】") && first.nativeCopies[0].includes('"status": 200'));
+  assert(first.nativeCopies[0].includes("【HGhub+ 网络诊断】") && first.nativeCopies[0].includes('"status": 200'));
   await page.getByText(/诊断已复制/).waitFor();
   report.passed.push("After 5.5 seconds of async diagnostics, copy the complete report through native IPC while web clipboard writes reject");
 
