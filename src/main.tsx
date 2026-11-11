@@ -6,20 +6,13 @@ import { invoke } from "@tauri-apps/api/core";
 import "./index.css";
 import { initPlaybackLog, installPlaybackPageEvents, tracePlayback } from "./playbackDiagnostics";
 import { initAutoLine } from "./autoLine";
-import { api, APP_VERSION, LOCAL, logLine, platform, webviewVersion } from "./api";
-import { setSiteBase } from "./html";
+import { APP_VERSION, LOCAL, logLine, platform, webviewVersion } from "./api";
 import Hls from "hls.js";
 import { installLayoutDiagnostics } from "./layoutDiagnostics";
 installPlaybackPageEvents();
 void initPlaybackLog();
 /* 自动选线：启动时比一次 com / ai，之后跟着网络变化复查 */
 initAutoLine();
-/* 正文相对路径的基准地址来自当前接入配置，换线后同步更新 */
-const syncSiteBase = () => {
-  api.lineState().then((s) => setSiteBase(s.base)).catch(() => {});
-};
-syncSiteBase();
-window.addEventListener("hg:line-changed", syncSiteBase);
 /* 环境指纹：写进始终记录的 debug.log。用户复制诊断时不用再自报版本、平台、内核版本 */
 logLine(
   `[env] ver=${APP_VERSION} platform=${platform} webview=${webviewVersion} ` +

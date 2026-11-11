@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, platform as envPlatform } from "./api";
-import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./html";
+import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity, setSiteBase } from "./html";
 import { appDataKey } from "./branding";
 import type { User } from "./types";
 
@@ -202,6 +202,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     api.boot()
       .then((r) => {
         if (r.user && (r.user as User).id) setUser(r.user as User);
+        setSiteBase(r.base);
         if (typeof r.strict_security === "boolean") {
           setStrictSecurityState(r.strict_security);
           setHtmlStrictSecurity(r.strict_security);
@@ -266,7 +267,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
    * 挂载时拉一次，所以这里给一个递增的 key，让它们重挂载、重新请求。
    */
   useEffect(() => {
-    const bump = () => setLineEpoch((n) => n + 1);
+    const bump = () => {
+      setLineEpoch((n) => n + 1);
+      api.lineState().then((s) => setSiteBase(s.base)).catch(() => {});
+    };
     window.addEventListener("hg:line-changed", bump);
     return () => window.removeEventListener("hg:line-changed", bump);
   }, []);
