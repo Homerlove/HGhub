@@ -1,7 +1,10 @@
+mod adapters;
 mod api;
+mod commands;
+mod domain;
 #[cfg(target_os = "ios")]
 mod ios_layout;
-mod lines;
+mod infra;
 #[cfg(target_os = "linux")]
 mod linux_http;
 mod logging;
@@ -12,6 +15,8 @@ mod media_dns;
 mod net;
 mod network_policy;
 mod playback_log;
+mod ports;
+mod services;
 mod session;
 
 use api::Api;
@@ -82,8 +87,9 @@ pub fn run() {
         .setup(|app| {
             if let Ok(dir) = app.path().app_data_dir() {
                 let _ = std::fs::create_dir_all(&dir);
-                // 上次选择的线路（设置 → 线路）在启动时恢复
-                net::bind_base(&dir);
+                // 上次激活的门牌（设置 → 数据源）在启动时恢复
+                network_policy::bind_security(&dir);
+                infra::source::bind(&dir);
                 playback_log::bind(&dir);
                 let state: tauri::State<Api> = app.state();
                 state.session.bind(dir);
@@ -185,6 +191,10 @@ pub fn run() {
             api::line_auto,
             api::line_try_main,
             api::line_health,
+            commands::data::data_call,
+            commands::source::gate_open,
+            commands::source::gate_state,
+            commands::source::gate_reset,
             api::check_update,
             api::open_url,
             api::set_orientation,
