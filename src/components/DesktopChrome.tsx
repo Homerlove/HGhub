@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useStore, type Tab } from "../store";
 import { APP_VERSION } from "../api";
+import { APP_NAME } from "../branding";
 import { Avatar } from "./ui";
 import {
   IClose, IGrid, IGridF, IHome, IHomeF, IMinus, IMoon, IRestore, ISearch, ISettings, ISidebar,
@@ -33,7 +34,7 @@ export function DesktopTitleBar({ collapsed, onToggle }: { collapsed: boolean; o
       onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) appWindow().toggleMaximize().catch(() => {}); }}>
       <div className="win-wordmark" data-tauri-drag-region>
         <Logo size={24} />
-        <span>HG<span className="win-wordmark-light">hub</span></span>
+        <span>HG<span className="win-wordmark-light">hub</span><span className="text-primary">+</span></span>
       </div>
       <button className="win-caption-tool" aria-label={collapsed ? "展开侧栏" : "收起侧栏"} onClick={onToggle}>
         <ISidebar size={17} strokeWidth={1.7} />
@@ -106,11 +107,11 @@ export function DesktopRail({ collapsed }: { collapsed: boolean }) {
           <button className="win-account" onClick={() => { setTab("profile"); if (!user) setLoginOpen(true); }}>
             <Avatar size={34} hue={220} name={user?.nickname} icon={user ? undefined : <IUser size={17} />} />
             <span className="win-account-copy">
-              <strong>{user?.nickname || "登录 HGhub"}</strong>
+              <strong>{user?.nickname || `登录 ${APP_NAME}`}</strong>
               <small>{user ? "你的精彩，都在这里" : "留住每一次心动"}</small>
             </span>
           </button>
-          <span className="win-sidebar-version">HGhub for {platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} {APP_VERSION}</span>
+          <span className="win-sidebar-version">{APP_NAME} for {platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} {APP_VERSION}</span>
         </div>
       </div>
     </nav>

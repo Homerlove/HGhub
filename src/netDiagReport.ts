@@ -10,6 +10,8 @@
  *   4. 原始 JSON 附在末尾，机器也能解析
  */
 
+import { APP_NAME } from "./branding";
+
 type Json = Record<string, unknown>;
 
 const str = (v: unknown): string => (typeof v === "string" ? v : "");
@@ -53,7 +55,7 @@ export function formatNetDiag(raw: Json): string {
 
   /* ── 头部：时间 + 结论 ── */
   const when = new Date().toLocaleString("zh-CN", { hour12: false });
-  lines.push(`【HGhub 网络诊断】${when}`);
+  lines.push(`【${APP_NAME} 网络诊断】${when}`);
   lines.push("");
   lines.push(`结论：${summary || VERDICT_TEXT[verdict] || verdict}`);
   lines.push(`代码：${verdict}（${VERDICT_TEXT[verdict] ?? "未归类"}）`);

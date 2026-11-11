@@ -1,8 +1,11 @@
 import { LOCAL } from "./api";
 import DOMPurify from "dompurify";
 
-/** 站点根地址：正文里的相对路径要补全 */
-const SITE = "https://huangguoai.com";
+/** 站点根地址：正文里的相对路径要补全。由启动时的接入配置注入，不在源码写死域名。 */
+let SITE = "";
+export function setSiteBase(base: string): void {
+  SITE = (base || "").trim().replace(/\/+$/, "");
+}
 // 启动前默认严格；有效状态只由 Rust app_boot / security_set 返回值更新。
 let strictSecurity = true;
 
@@ -64,7 +67,7 @@ function abs(raw: string, strict = strictSecurity): string {
   const s = (raw || "").trim();
   if (!s) return "";
   try {
-    const url = new URL(s, SITE);
+    const url = SITE ? new URL(s, SITE) : new URL(s);
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return "";
     if (isInternalWebviewHost(url.hostname)) return "";
     if (strict && isPrivateOrLocalHost(url.hostname)) return "";

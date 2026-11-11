@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { api, APP_VERSION, hostOf, logLine, platform, type UpdateInfo } from "../api";
+import { APP_NAME } from "../branding";
 import { useStore } from "../store";
 import { Modal, Toggle } from "../components/ui";
 import LinePicker from "../components/LinePicker";
@@ -7,7 +8,7 @@ import { autoLineEnabled, pickLine, setAutoLine } from "../autoLine";
 import { copyPlaybackLog, initPlaybackLog, setPlaybackLog, tracePlayback, usePlaybackLog } from "../playbackDiagnostics";
 import { formatNetDiag, shortVerdict } from "../netDiagReport";
 import { copyText } from "../clipboard";
-import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRefresh, ISettings, ISun, IVolMute, IList } from "../icons";
+import { IBack, IBoltF, IBroom, IChevR, IHeart, IInfo, ILink, ILockF, IMoon, IRefresh, ISettings, ISun, IVolMute, IList, Logo } from "../icons";
 
 /* 独立设置页：线路 / 外观 / 播放 / 本地数据 / 清理缓存 / 网络诊断 / 关于
    入口：Windows 侧栏「设置」、Android「我的」右上角齿轮 */
@@ -272,14 +273,14 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
             <button onClick={() => setAbout(true)} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
               <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IInfo size={16} /></span>
               <div className="flex-1">
-                <div className="text-[12.5px] text-on">关于 HGhub</div>
+                <div className="text-[12.5px] text-on">关于 {APP_NAME}</div>
                 <div className="text-[10.5px] text-mut">版本 {APP_VERSION} · 仅限非商业使用</div>
               </div>
               <IChevR size={15} className="text-mut" />
             </button>
           </Section>
 
-          <div className="text-center text-[10px] text-dim mt-5">HGhub {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>
+          <div className="text-center text-[10px] text-dim mt-5">{APP_NAME} {APP_VERSION} · {platform === "android" ? "Android" : platform === "ios" ? "iOS" : platform === "macos" ? "macOS" : platform === "linux" ? "Linux" : "Windows"} 客户端</div>
         </div>
       </div>
 
@@ -307,10 +308,10 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
       <Modal open={about} onClose={() => setAbout(false)} width={392}>
         <div className="p-5">
           <div className="flex items-center gap-3">
-            <span className="w-11 h-11 rounded-(--r-sm) brand-grad glow-neon flex items-center justify-center text-on-primary text-[17px] font-black">H</span>
+            <Logo size={44} />
             <div>
-              <div className="text-[16px] font-bold text-on leading-tight">HGhub</div>
-              <div className="text-[11px] text-mut mt-0.5">黄果短剧 · 第三方客户端 v{APP_VERSION}</div>
+              <div className="text-[16px] font-bold text-on leading-tight">{APP_NAME}</div>
+              <div className="text-[11px] text-mut mt-0.5">{APP_NAME} · 第三方客户端 v{APP_VERSION}</div>
             </div>
           </div>
 
@@ -331,10 +332,13 @@ export default function Settings({ onBack, wide }: { onBack: () => void; wide: b
               <span className="text-[12px] text-on/85">github.com/zxsos/HGhub</span>
               <span className="ml-auto text-[10.5px] text-primary">复制</span>
             </button>
-            <button onClick={() => { copyText("https://huangguoai.com").then(() => toast("站点地址已复制", "ok")).catch(() => {}); }}
+            <button onClick={() => {
+              if (!lineBase) { toast("尚未配置接入地址", "info"); return; }
+              copyText(lineBase).then(() => toast("接入地址已复制", "ok")).catch(() => {});
+            }}
               className="w-full flex items-center gap-2 py-2.5 text-left pressable">
               <ILink size={15} className="text-mut" />
-              <span className="text-[12px] text-on/85">huangguoai.com</span>
+              <span className="text-[12px] text-on/85">{lineBase ? hostOf(lineBase) : "未配置接入地址"}</span>
               <span className="ml-auto text-[10.5px] text-primary">复制</span>
             </button>
             <div className="flex items-center gap-2 py-2.5">
