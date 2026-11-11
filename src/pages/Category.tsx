@@ -196,7 +196,8 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
   const { push } = useStore();
   const [searching, setSearching] = useState(false);
   const [sort, setSort] = useState<"最新" | "最热" | "高分">("最新");
-  const [items, setItems] = useState<VideoCard[]>([]);
+  const [pageItems, setPageItems] = useState<VideoCard[][]>([]);
+  const items = pageItems.flat();
   const [page, setPage] = useState(0);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -211,9 +212,9 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
     try {
       const next = page + 1;
       const res = await api.category(cate, next, 20);
-      setItems((prev) => {
-        const seen = new Set(prev.map((x) => x.id));
-        return [...prev, ...(res?.items || []).filter((x) => !seen.has(x.id))];
+      setPageItems((prev) => {
+        const seen = new Set(prev.flat().map((x) => x.id));
+        return [...prev, (res?.items || []).filter((x) => !seen.has(x.id))];
       });
       setPage(next);
       setPages(res?.pagination?.pages || next);
@@ -236,11 +237,13 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, pages]);
 
-  const sorted = [...items].sort((a, b) => {
+  // 每个服务端分页内部排序，分页之间保持追加顺序：
+  // 翻页时新一页不会因为 id/hot/score 更高而插到已看内容上方，避免“加载更多像刷新”。
+  const sorted = pageItems.flatMap((list) => [...list].sort((a, b) => {
     if (sort === "最热") return (b.hot || 0) - (a.hot || 0);
     if (sort === "高分") return (b.score || 0) - (a.score || 0);
     return b.id - a.id;
-  });
+  }));
 
   return (
     <div className="absolute inset-0 bg-bg flex flex-col">
