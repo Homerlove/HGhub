@@ -123,7 +123,7 @@ fn array<'a>(v: &'a Value, keys: &[&str]) -> &'a [Value] {
     &[]
 }
 
-fn root(v: &Value, keys: &[&str]) -> &Value {
+fn root<'a>(v: &'a Value, keys: &[&str]) -> &'a Value {
     pick(v, keys)
 }
 
