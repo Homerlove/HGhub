@@ -137,8 +137,6 @@ type Store = {
   platform: Platform;
   theme: Theme; setTheme: (t: Theme) => void;
   tab: Tab; setTab: (t: Tab) => void;
-  /** 搜索页初始范围：从吃瓜栏目进来预设为 post（#34） */
-  searchScope: "video" | "post"; setSearchScope: (s: "video" | "post") => void;
   stack: Page[]; push: (p: PageInput) => void; pop: () => void;
   user: User | null; setUser: (u: User | null) => void;
   loginOpen: boolean; setLoginOpen: (b: boolean) => void;
@@ -175,7 +173,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [p, setP] = useState<Persist>(loadPersist);
   const [theme, setThemeState] = useState<Theme>(readTheme);
   const [tab, setTabRaw] = useState<Tab>("home");
-  const [searchScope, setSearchScope] = useState<"video" | "post">("video");
   const [stack, setStack] = useState<Page[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -365,7 +362,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<Store>(() => ({
     platform: envPlatform,
     theme, setTheme: setThemeState,
-    tab, setTab, searchScope, setSearchScope, stack, push, pop,
+    tab, setTab, stack, push, pop,
     user, setUser, loginOpen, setLoginOpen, logout,
     likes: p.likes, favs: p.favs, history: p.history, follows: p.follows,
     isLiked: (id) => p.likes.includes(id),
@@ -378,7 +375,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     searchHist: p.searchHist, addSearch, clearSearchHist,
     strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch,
-  }), [theme, tab, setTab, searchScope, stack, push, pop, user, loginOpen, logout,
+  }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     setMuted, setMuteOnStartup, setSwipeEp, setPreferHevc, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch, theater, setTheater, fs, setFs, clean, setClean]);

@@ -1,23 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { api, fmt, isMobile } from "../api";
-import type { HotWord, Post, RankItem, VideoCard } from "../types";
+import type { HotWord, RankItem, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Masonry, RankRow } from "../components/cards";
-import { Empty, Img } from "../components/ui";
+import { Empty } from "../components/ui";
 import { IBack, IClose, IFireF, IRefresh, ISearch, ITrophy } from "../icons";
 
 const HOT_TAGS = ["都市", "逆袭", "古风", "系统", "后宫", "校园", "仙侠", "职场", "大男主", "御姐", "脑洞", "奇幻"];
 
-/** 搜索范围：短剧 / 吃瓜帖。吃瓜必须显式传 type=post，否则后端只回短剧（issue #34）。 */
-type Scope = "video" | "post";
-
-export default function Search({ active, wide, initialScope = "video" }: { active: boolean; wide: boolean; initialScope?: Scope }) {
+export default function Search({ active, wide }: { active: boolean; wide: boolean }) {
   const { push, searchHist, addSearch, clearSearchHist, toast } = useStore();
-  const [scope, setScope] = useState<Scope>(initialScope);
-  /* 从吃瓜栏目点搜索进来时，store 已把 searchScope 设成 post；
-     这里跟随它切换（用户手动切过 scope 后，外部再改也跟随）。 */
-  useEffect(() => { setScope(initialScope); }, [initialScope]);
-  const [posts, setPosts] = useState<Post[]>([]);
   const [q, setQ] = useState("");
   const [submitted, setSubmitted] = useState("");
   const [items, setItems] = useState<VideoCard[]>([]);
@@ -42,29 +34,18 @@ export default function Search({ active, wide, initialScope = "video" }: { activ
     if (active) refreshHot();
   }, [active]);
 
-  const run = async (keyword: string, p: number, at: Scope = scope) => {
+  const run = async (keyword: string, p: number) => {
     if (busy.current) return;
     if (p > pages && p > 1) return;
     busy.current = true;
     setLoading(true);
     try {
-      const res = at === "post"
-        ? await api.searchPosts(keyword, p, 20)
-        : await api.search(keyword, p, 20, "video");
-      /* 两个 scope 的 item 结构不同：吃瓜是 Post，短剧是 VideoCard，分开存避免互相污染 */
-      if (at === "post") {
-        setPosts((prev) => {
-          const base = p === 1 ? [] : prev;
-          const seen = new Set(base.map((x) => x.id));
-          return [...base, ...((res?.items || []) as unknown as Post[]).filter((x) => !seen.has(x.id))];
-        });
-      } else {
-        setItems((prev) => {
-          const base = p === 1 ? [] : prev;
-          const seen = new Set(base.map((x) => x.id));
-          return [...base, ...((res?.items || []) as unknown as VideoCard[]).filter((x) => !seen.has(x.id))];
-        });
-      }
+      const res = await api.search(keyword, p, 20);
+      setItems((prev) => {
+        const base = p === 1 ? [] : prev;
+        const seen = new Set(base.map((x) => x.id));
+        return [...base, ...(res?.items || []).filter((x) => !seen.has(x.id))];
+      });
       setPage(p);
       setPages(res?.pagination?.pages || 1);
       setErr(null);
@@ -82,7 +63,6 @@ export default function Search({ active, wide, initialScope = "video" }: { activ
     setSubmitted(k);
     addSearch(k);
     setItems([]);
-    setPosts([]);
     setPages(1);
     run(k, 1);
   };
@@ -96,27 +76,15 @@ export default function Search({ active, wide, initialScope = "video" }: { activ
         <form className="flex-1 flex items-center gap-2 h-11 rounded-(--r-ctl) bg-s3 px-3.5 focus-within:bg-s4 transition-colors"
           onSubmit={(e) => { e.preventDefault(); submit(q); }}>
           <ISearch size={17} className="text-mut shrink-0" />
-          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder={scope === "post" ? "搜索吃瓜帖、关键词…" : "搜索短剧、作者、题材…"}
+          <input ref={inputRef} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索短剧、作者、题材…"
             className="flex-1 min-w-0 bg-transparent text-[13.5px] text-on placeholder-dim outline-none" />
-          {q && <button type="button" onClick={() => { setQ(""); setSubmitted(""); setItems([]); setPosts([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
+          {q && <button type="button" onClick={() => { setQ(""); setSubmitted(""); setItems([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
         </form>
         <button onClick={() => push({ kind: "ranks" })} aria-label="排行榜"
           className="w-11 h-11 rounded-(--r-sm) flex items-center justify-center bg-primary text-on-primary pressable elev-2">
           <ITrophy size={19} />
         </button>
       </div>
-
-      {/* 搜索范围切换：吃瓜帖必须显式传 type=post，否则只回短剧（#34） */}
-      {querying && (
-        <div className="shrink-0 px-4 pb-2.5 flex gap-2">
-          {([["video", "短剧"], ["post", "吃瓜帖"]] as const).map(([k, label]) => (
-            <button key={k} type="button"
-              onClick={() => { if (k === scope) return; setScope(k); setPage(0); setPages(1); setErr(null); run(submitted, 1, k); }}
-              className={`px-4 h-8 rounded-(--r-ctl) text-[12px] font-semibold pressable ${scope === k ? "tonal text-on-sec" : "bg-s3 text-mut"}`}
-              style={scope === k ? { background: "var(--p-sec)", color: "var(--p-primary)" } : undefined}>{label}</button>
-          ))}
-        </div>
-      )}
 
       <div className="flex-1 scroll-y px-4 pb-24">
         {!querying ? (
@@ -178,41 +146,8 @@ export default function Search({ active, wide, initialScope = "video" }: { activ
           </>
         ) : (
           <>
-            <div className="text-[11.5px] text-mut mt-1 mb-2.5">「{submitted}」共 <span className="text-primary font-bold">{scope === "post" ? posts.length : items.length}</span> 条{scope === "post" ? "吃瓜帖" : "短剧"}</div>
-            {scope === "post" ? (
-              /* 吃瓜帖结果：结构是 Post（无 author 对象），用两列封面墙 */
-              posts.length ? (
-                <>
-                  <div className={`${wide ? "columns-3 xl:columns-4" : "columns-2"} gap-2`}>
-                    {posts.map((post) => (
-                      <button key={post.id} onClick={() => push({ kind: "post", id: post.id })}
-                        className="w-full break-inside-avoid mb-2 relative rounded-(--r-sm) overflow-hidden bg-s1 elev-1 pressable block"
-                        style={{ paddingTop: "128%" }}>
-                        <Img src={post.cover} />
-                        <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/90 via-black/40 to-transparent" />
-                        <div className="absolute inset-x-0 bottom-0 p-2">
-                          <div className="text-[11.5px] font-medium text-white clamp-2 leading-snug tsh">{post.title}</div>
-                          <div className="flex items-center gap-1 mt-1 text-[9.5px] text-white/70">
-                            <IFireF size={10} className="text-white/70" />{fmt(post.hot)}
-                          </div>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="flex justify-center py-4">
-                    {loading ? <div className="w-6 h-6 spinner" />
-                      : page < pages ? (
-                        <button onClick={() => run(submitted, page + 1)} className="px-5 h-9 rounded-(--r-ctl) bg-s3 text-[12px] text-on/85 pressable">加载更多</button>
-                      ) : <span className="text-[10.5px] text-dim">— 已经到底啦 —</span>}
-                  </div>
-                </>
-              ) : loading ? (
-                <div className="flex justify-center py-12"><div className="w-8 h-8 spinner" /></div>
-              ) : (
-                <Empty icon={<IFireF size={26} />} title={err || "没搜到相关吃瓜帖"} sub="换个关键词试试，或切到「短剧」再搜"
-                  action="去逛吃瓜频道" onAction={() => push({ kind: "posts" })} />
-              )
-            ) : items.length ? (
+            <div className="text-[11.5px] text-mut mt-1 mb-2.5">「{submitted}」共 <span className="text-primary font-bold">{items.length}</span> 条结果</div>
+            {items.length ? (
               <>
                 <Masonry videos={items} wide={wide} onOpen={(v) => push({ kind: "feed", videoIds: items.map((x) => x.id), index: items.findIndex((x) => x.id === v.id), title: `搜索 · ${submitted}` })} />
                 <div className="flex justify-center py-4">
