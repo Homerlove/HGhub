@@ -1,7 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { api, platform as envPlatform } from "./api";
-import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./html";
-import type { User } from "./types";
+import { api, platform as envPlatform } from "../api";
+import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity, setSiteBase } from "../html";
+import { appDataKey } from "../branding";
+import type { BootInfo, GateState, User } from "../types";
 
 export type Platform = "android" | "ios" | "windows" | "macos" | "linux";
 export type Theme = "dark" | "light";
@@ -75,7 +76,8 @@ type Persist = {
   preferHevc: boolean;
 };
 
-const LS = "hghub_app_v1";
+const LS = appDataKey("default");
+const LEGACY_LS = "hghub_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
   muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: true, preferHevc: false,
@@ -100,7 +102,7 @@ function normalizeHistory(raw: unknown): WatchProgress[] {
 
 function loadPersist(): Persist {
   try {
-    const raw = localStorage.getItem(LS);
+    const raw = localStorage.getItem(LS) ?? localStorage.getItem(LEGACY_LS);
     if (!raw) return DEFAULTS;
     const p = { ...DEFAULTS, ...(JSON.parse(raw) as Partial<Persist>) };
     // 只在启动时应用；本次使用中取消静音不会关闭此偏好。
@@ -163,6 +165,10 @@ type Store = {
   toasts: Toast[]; toast: (msg: string, icon?: Toast["icon"]) => void;
   /** 线路切换计数：变了就让列表页重挂载，重新拉一遍数据 */
   lineEpoch: number;
+  /** 门牌：未激活时只显示 SourceGate，不拉业务数据 */
+  gate: GateState; gateReady: boolean; gateBusy: boolean; gateError: string;
+  activateGate: (address: string) => Promise<void>;
+  resetGate: () => Promise<void>;
 };
 
 const Ctx = createContext<Store>(null as unknown as Store);
@@ -185,6 +191,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [cliRelaxed, setCliRelaxed] = useState(false);
   const [strictSecurityReady, setStrictSecurityReady] = useState(false);
   const [securityPending, setSecurityPending] = useState(false);
+  const [gate, setGate] = useState<GateState>({ base: "", adapter: "edge_v1", activated: false });
+  const [gateReady, setGateReady] = useState(false);
+  const [gateBusy, setGateBusy] = useState(false);
+  const [gateError, setGateError] = useState("");
   const toastSeq = useRef(0);
 
   useEffect(() => {
@@ -196,18 +206,70 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     try { localStorage.setItem(LS, JSON.stringify(p)); } catch { /* ignore */ }
   }, [p]);
 
+  const applyBoot = useCallback((r: BootInfo) => {
+    if (r.user && r.user.id) setUser(r.user);
+    if (r.gate) setGate(r.gate);
+    // 兼容旧壳（无 gate_state / boot 不带 gate）：有 base 即视为已激活，避免老用户被门牌页挡住。
+    else if (r.base) setGate({ base: r.base, adapter: "edge_v1", activated: true });
+    setSiteBase(r.base || r.gate?.base || "");
+    if (typeof r.strict_security === "boolean") {
+      setStrictSecurityState(r.strict_security);
+      setHtmlStrictSecurity(r.strict_security);
+      setStrictSecurityReady(true);
+    }
+    setCliRelaxed(!!r.cli_relaxed);
+  }, []);
+
+  /* 启动只读门牌；没有门牌时 SourceGate 不触发任何业务数据请求。 */
   useEffect(() => {
-    api.boot()
-      .then((r) => {
-        if (r.user && (r.user as User).id) setUser(r.user as User);
-        if (typeof r.strict_security === "boolean") {
-          setStrictSecurityState(r.strict_security);
-          setHtmlStrictSecurity(r.strict_security);
-          setStrictSecurityReady(true);
-        }
-        setCliRelaxed(!!r.cli_relaxed);
+    let alive = true;
+    api.gateState()
+      .then((g) => {
+        if (!alive) return;
+        setGate(g);
+        setGateReady(true);
+        if (g.activated) api.boot().then((r) => { if (alive) applyBoot(r); }).catch(() => {});
       })
-      .catch(() => { /* 离线也能用 */ });
+      .catch(() => {
+        if (!alive) return;
+        setGateReady(true);
+        // 兼容旧壳：gate_state 不存在时仍尝试 boot，避免直接卡死
+        api.boot().then((r) => { if (alive) applyBoot(r); }).catch(() => {});
+      });
+    return () => { alive = false; };
+  }, [applyBoot]);
+
+  const activateGate = useCallback(async (address: string) => {
+    const raw = address.trim();
+    if (!raw) { setGateError("请输入接入地址"); throw new Error("请输入接入地址"); }
+    setGateBusy(true);
+    setGateError("");
+    try {
+      const next = await api.gateOpen(raw);
+      setGate(next);
+      setSiteBase(next.base);
+      setUser(null);
+      setStack([]);
+      setTabRaw("home");
+      setLoginOpen(false);
+      setLineEpoch((n) => n + 1);
+      api.boot().then(applyBoot).catch(() => {});
+    } catch (e) {
+      const msg = (e as Error).message || "接入失败";
+      setGateError(msg);
+      throw e;
+    } finally {
+      setGateBusy(false);
+    }
+  }, [applyBoot]);
+
+  const resetGate = useCallback(async () => {
+    const next = await api.gateReset();
+    setGate(next);
+    setUser(null);
+    setStack([]);
+    setTabRaw("home");
+    setSiteBase("");
   }, []);
 
   const setStrictSecurity = useCallback(async (on: boolean) => {
@@ -264,7 +326,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
    * 挂载时拉一次，所以这里给一个递增的 key，让它们重挂载、重新请求。
    */
   useEffect(() => {
-    const bump = () => setLineEpoch((n) => n + 1);
+    const bump = () => {
+      setLineEpoch((n) => n + 1);
+      api.lineState().then((s) => setSiteBase(s.base)).catch(() => {});
+    };
     window.addEventListener("hg:line-changed", bump);
     return () => window.removeEventListener("hg:line-changed", bump);
   }, []);
@@ -375,10 +440,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     searchHist: p.searchHist, addSearch, clearSearchHist,
     strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
     toasts, toast, lineEpoch,
+    gate, gateReady, gateBusy, gateError, activateGate, resetGate,
   }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     setMuted, setMuteOnStartup, setSwipeEp, setPreferHevc, setVolume, addSearch, clearSearchHist, strictSecurity, strictSecurityReady, securityPending, cliRelaxed, setStrictSecurity,
-    toasts, toast, lineEpoch, theater, setTheater, fs, setFs, clean, setClean]);
+    toasts, toast, lineEpoch, theater, setTheater, fs, setFs, clean, setClean,
+    gate, gateReady, gateBusy, gateError, activateGate, resetGate]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

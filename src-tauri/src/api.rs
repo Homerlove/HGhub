@@ -56,92 +56,90 @@ pub async fn net_diag() -> Result<Value, String> {
 
 /* ───────────────────────── 线路（数据源） ───────────────────────── */
 
-/// 当前线路 + 固定线路清单（镜像线路另外按需拉取）。
+/// 当前门牌状态；`default` / `fixed` 保留旧字段形状，避免前端旧版本读取时报错。
 #[tauri::command]
 pub async fn line_state() -> Result<Value, String> {
+    let gate = crate::infra::source::gate_state();
     Ok(json!({
-        "base": base(),
-        "default": crate::net::DEFAULT_BASE,
-        "fixed": crate::lines::fixed(),
+        "base": gate.base.clone(),
+        "default": "",
+        "fixed": [],
+        "gate": gate,
     }))
 }
 
-/// 手动切换线路：立即生效并落盘（下次启动沿用）。
+/// 旧版「切换线路」入口：等价于门牌零校验激活。
 #[tauri::command]
 pub async fn line_set(state: State<'_, Api>, url: String) -> Result<String, String> {
     let previous = base();
-    let next = crate::net::set_base(&url)?;
-    if previous != next {
+    let next = crate::infra::source::gate_open(&url)?;
+    if previous != next.base {
         state.session.clear();
     }
-    Ok(next)
+    Ok(next.base)
 }
 
-/// 从地址发布页抓镜像线路（只在用户点开「线路」时调用）。
+/// 地址发布页在本版停用：门牌来自用户输入，不再抓固定发布页。
 #[tauri::command]
 pub async fn line_mirrors() -> Result<Value, String> {
-    // 用户手动点「刷新 / 打开线路」时重新读一次系统代理：代理软件开关过之后旧客户端会卡死
     crate::net::refresh_client();
-    crate::lines::mirrors().await
+    Ok(json!({ "source": "", "items": [], "recommended_source": "", "recommended": [] }))
 }
 
-/// 可达性探测：只报结果，不做自动检查 / 自动切换。
 #[tauri::command]
-pub async fn line_probe(urls: Vec<String>) -> Result<Value, String> {
+pub async fn line_probe(_urls: Vec<String>) -> Result<Value, String> {
     crate::net::refresh_client();
-    Ok(crate::lines::probe(urls).await)
+    Ok(json!([]))
 }
 
-/// 自动选线：`.com` 与 `.ai` 各探一次，选通的那条、快的那条。
-///
-/// 和 [`line_set`] 的区别是**不清会话**：两个域名是同一个站点，登录态本来就通用；
-/// 自动切换如果清会话，用户每换一次网络就被踢下线，那是不能接受的。
+/// 旧版自动选线：本版只有一个用户配置的源，不再自动切换；保留命令给旧前端兼容。
 #[tauri::command]
 pub async fn line_auto() -> Result<Value, String> {
     crate::net::refresh_client();
-    let pick = crate::lines::auto_pick().await;
-    let chosen = pick
-        .get("base")
-        .and_then(Value::as_str)
-        .unwrap_or_default()
-        .to_string();
     let previous = base();
-    let mut switched = false;
-    if !chosen.is_empty() && chosen != previous {
-        let next = crate::net::set_base(&chosen)?;
-        switched = next != previous;
-    }
+    let probe = probe_health().await;
     Ok(json!({
         "previous": previous,
-        "base": crate::net::base(),
-        "switched": switched,
-        "pick": pick,
+        "base": base(),
+        "switched": false,
+        "pick": probe,
     }))
 }
 
-/// 当前走的是镜像时，敲一次主站：通了就切回（不清会话）。
-///
-/// 和 [`line_auto`] 的分工：[`line_auto`] 是「整体比一次」，要抓发布页；
-/// 这个只问一句「主站现在通不通」，代价一个请求，可以频繁调用。
 #[tauri::command]
 pub async fn line_try_main() -> Result<Value, String> {
     crate::net::refresh_client();
-    let probe = crate::lines::try_main().await;
     let previous = base();
-    let mut switched = false;
-    if probe.get("ok").and_then(Value::as_bool).unwrap_or(false) {
-        let chosen = probe.get("base").and_then(Value::as_str).unwrap_or_default();
-        if !chosen.is_empty() && chosen != previous {
-            let next = crate::net::set_base(chosen)?;
-            switched = next != previous;
-        }
-    }
+    let probe = probe_health().await;
     Ok(json!({
         "previous": previous,
-        "base": crate::net::base(),
-        "switched": switched,
+        "base": base(),
+        "switched": false,
         "probe": probe,
     }))
+}
+
+/// 线路体检：只探当前门牌一次，不自动切换。
+#[tauri::command]
+pub async fn line_health() -> Result<Value, String> {
+    Ok(probe_health().await)
+}
+
+async fn probe_health() -> Value {
+    let origin = base();
+    if origin.is_empty() {
+        return json!({ "base": "", "ok": false, "ms": 0, "status": Value::Null });
+    }
+    let started = std::time::Instant::now();
+    let ok = edge(&origin, "GET", "/api/videos?page=1&size=1", None, None)
+        .await
+        .is_ok();
+    json!({
+        "base": origin,
+        "ok": ok,
+        "ms": started.elapsed().as_millis() as u64,
+        "status": Value::Null,
+    })
 }
 
 /* ───────────────────────── 更新检查 ───────────────────────── */
@@ -170,9 +168,6 @@ fn is_newer(latest: &str, current: &str) -> bool {
 }
 
 /// 从 tag / name 里取出 `x.y.z`。
-///
-/// 我们的 tag 是 `hgfix-1.2.1-r5`，上游是 `v1.2.0`，release name 是 `HGhub 1.2.1+hg.1`。
-/// 直接拿去比会从第一位就判负（`hgfix-1` 解析成 0），所以先抠出版本号。
 fn version_in(text: &str) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
@@ -198,11 +193,6 @@ fn version_in(text: &str) -> String {
     String::new()
 }
 
-/// 线路体检：探一次 `/api/videos`，和自动选线用同一个判据。
-#[tauri::command]
-pub async fn line_health() -> Result<Value, String> {
-    Ok(crate::lines::health().await)
-}
 /// 对比 GitHub Release 的 tag 与当前版本（未认证 60 次/小时/IP，够用）。
 #[tauri::command]
 pub async fn check_update() -> Result<Value, String> {
@@ -459,6 +449,7 @@ pub async fn app_boot(state: State<'_, Api>) -> Result<Value, String> {
         "user": state.session.user(&origin),
         "logged_in": state.session.token(&origin).is_some(),
         "base": origin,
+        "gate": crate::infra::source::gate_state(),
         "strict_security": crate::network_policy::strict_security(),
         "cli_relaxed": crate::network_policy::cli_strict_override() == Some(false),
     }))
