@@ -26,14 +26,18 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
   const pending = useRef(new Set<string>());
   const errorsRef = useRef(errors);
   errorsRef.current = errors;
+  const lineEpochRef = useRef(lineEpoch);
+  lineEpochRef.current = lineEpoch;
+  const retryKeys = useRef(new Set<string>());
 
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
   }, []);
 
-  const loadPreview = useCallback(async (key: string) => {
+  const loadPreview = useCallback(async (key: string): Promise<void> => {
     if (pending.current.has(key)) return;
+    const requestEpoch = lineEpochRef.current;
     pending.current.add(key);
     setLoading(m => ({ ...m, [key]: true }));
     setErrors(m => ({ ...m, [key]: "" }));
@@ -46,10 +50,15 @@ export default function Category({ wide, active }: { wide: boolean; active: bool
         if (mounted.current) setRows(m => ({ ...m, [key]: result?.items || [] }));
       }
     } catch (error) {
-      if (mounted.current) setErrors(m => ({ ...m, [key]: (error as Error).message || "加载失败" }));
+      const stale = requestEpoch !== lineEpochRef.current;
+      if (mounted.current && !stale) setErrors(m => ({ ...m, [key]: (error as Error).message || "加载失败" }));
+      /* 请求在旧线路上发出、期间线路已切换：等 finally 里用新线路补拉一次 */
+      if (stale) retryKeys.current.add(key);
     } finally {
       pending.current.delete(key);
       if (mounted.current) setLoading(m => ({ ...m, [key]: false }));
+      const retry = retryKeys.current.delete(key);
+      if (retry && mounted.current) void loadPreview(key);
     }
   }, []);
 
