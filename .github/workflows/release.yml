@@ -410,19 +410,6 @@ jobs:
           echo "versionName=$V  versionCode=$CODE"
 
       # Tauri 2 在 Linux 上依赖 webkit2gtk-4.1；22.04 的 jammy-updates 已提供
-      - name: Point apt at Tsinghua mirror
-        run: |
-          set -euo pipefail
-          sudo sed -i -E \
-            -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-            /etc/apt/sources.list.d/ubuntu.sources
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            sudo sed -i -E \
-              -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-              /etc/apt/apt-mirrors.txt
-          fi
-          echo "arch=$(dpkg --print-architecture)"
-          grep -Rhn -E 'URIs|archive|tuna' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt || true
       - name: 安装系统依赖
         run: |
           sudo apt-get -o Acquire::Retries=3 update
@@ -479,19 +466,6 @@ jobs:
           V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           node scripts/set-version.mjs "$V"
 
-      - name: Point apt at Tsinghua mirror
-        run: |
-          set -euo pipefail
-          sudo sed -i -E \
-            -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-            /etc/apt/sources.list.d/ubuntu.sources
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            sudo sed -i -E \
-              -e 's#https?://(azure\.archive\.ubuntu\.com|archive\.ubuntu\.com|security\.ubuntu\.com)/ubuntu/?#https://mirrors.tuna.tsinghua.edu.cn/ubuntu/#g' \
-              /etc/apt/apt-mirrors.txt
-          fi
-          echo "arch=$(dpkg --print-architecture)"
-          grep -Rhn -E 'URIs|archive|tuna' /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt || true
       - name: 安装系统依赖
         run: |
           sudo apt-get -o Acquire::Retries=3 update
