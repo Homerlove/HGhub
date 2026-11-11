@@ -32,14 +32,36 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: playwright-${{ runner.os }}-
 
-      - name: Install browser and media tools
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Resolve browser and media tools
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-          pnpm exec playwright-core install --with-deps chromium
+          set -euo pipefail
+          browser="$(command -v chromium || command -v chromium-browser || command -v google-chrome || true)"
+          if [ -z "$browser" ]; then
+            echo "System Chromium not found; installing Playwright Chromium from cache"
+            pnpm exec playwright-core install chromium
+            browser="$(node -e 'const { chromium } = require("playwright-core"); console.log(chromium.executablePath())')"
+          fi
+          ffmpeg="$(command -v ffmpeg || true)"
+          if [ -z "$ffmpeg" ]; then
+            echo "System ffmpeg not found; installing"
+            sudo apt-get update
+            sudo apt-get install -y --no-install-recommends ffmpeg
+            ffmpeg="$(command -v ffmpeg)"
+          fi
+          echo "BROWSER_EXECUTABLE=$browser" >> "$GITHUB_ENV"
+          echo "FFMPEG_PATH=$ffmpeg" >> "$GITHUB_ENV"
+          "$browser" --version
+          "$ffmpeg" -version | head -1
 
       - name: Typecheck and build
         run: pnpm build
@@ -62,7 +84,7 @@ jobs:
         run: pnpm test:diagnostic-copy
 
       - name: Playback diagnostics
-        run: pnpm test:playback
+        run: pnpm test:playback -- --browser-executable "$BROWSER_EXECUTABLE"
 
       - name: Upload test artifacts
         if: always()
@@ -80,10 +102,18 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Cache apt archives
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/apt-archives
+          key: apt-${{ runner.os }}-v1
+          restore-keys: apt-${{ runner.os }}-
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo mkdir -p "$RUNNER_TEMP/apt-archives"
+          sudo apt-get -o Dir::Cache::archives="$RUNNER_TEMP/apt-archives/" install -y --no-install-recommends \
             libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
             librsvg2-dev patchelf build-essential curl wget file libssl-dev libxdo-dev
 
