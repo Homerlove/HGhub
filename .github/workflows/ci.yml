@@ -99,7 +99,7 @@ jobs:
         run: pnpm test:diagnostic-copy
 
       - name: Playback diagnostics
-        run: pnpm test:playback -- --media-dir .cache/playback-media --browser-executable "$BROWSER_EXECUTABLE"
+        run: pnpm test:playback --media-dir .cache/playback-media --browser-executable "$BROWSER_EXECUTABLE"
 
       - name: Upload test artifacts
         if: always()
@@ -127,12 +127,22 @@ jobs:
       - name: Point apt at Tsinghua mirror
         run: |
           set -euo pipefail
-          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f -name '*.sources' \
-            -exec sed -i -E 's|^URIs:.*|URIs: https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|' {} +
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            sudo sed -i -E 's|^.*$|https://mirrors.tuna.tsinghua.edu.cn/ubuntu/|' /etc/apt/apt-mirrors.txt
-          fi
-          grep -Rhn '^URIs:' /etc/apt/sources.list.d /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          sudo rm -f /etc/apt/sources.list.d/*.sources
+          sudo tee /etc/apt/sources.list.d/ubuntu.sources >/dev/null <<'EOF'
+          Types: deb
+          URIs: https://mirrors.tuna.tsinghua.edu.cn/ubuntu/
+          Suites: noble noble-updates noble-backports
+          Components: main restricted universe multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+          Types: deb
+          URIs: https://mirrors.tuna.tsinghua.edu.cn/ubuntu/
+          Suites: noble-security
+          Components: main restricted universe multiverse
+          Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+          EOF
+          echo "arch=$(dpkg --print-architecture)"
+          grep -Rhn '^URIs:' /etc/apt/sources.list.d/ubuntu.sources
 
       - name: Install system dependencies
         run: |
