@@ -251,8 +251,8 @@ export function ChannelPage({ cate, name, onBack, wide }: { cate: string; name: 
           <div className="flex-1 min-w-0">
             <div className="text-[17px] font-bold text-on leading-tight">{name}</div>
             <div className="text-[10.5px] text-mut">共 {items.length} 部 · 已加载 {page}/{Math.max(pages, 1)} 页</div>
-            <button onClick={() => setSearching(true)} aria-label="搜索短剧" className="ml-auto w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
           </div>
+          <button onClick={() => setSearching(true)} aria-label="搜索短剧" className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable"><ISearch size={19} /></button>
         </div>
         <div className="px-4 pb-3 flex gap-2">
           {(["最新", "最热", "高分"] as const).map((s) => (

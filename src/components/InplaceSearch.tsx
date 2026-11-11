@@ -80,13 +80,13 @@ export function InplaceSearch({ kind, onOpenVideo, onOpenPost, onClose, wide }: 
 
   return (
     <div className="absolute inset-0 z-20 bg-bg flex flex-col">
-      <div className="shrink-0 flex items-center gap-2 px-2 bg-s1" style={{ paddingTop: "var(--sat, 0px)" }}>
+      <div className="shrink-0 px-4 pb-3 flex items-center gap-2.5 bg-s1" style={{ paddingTop: "calc(var(--sat, 0px) + 12px)" }}>
         <button onClick={onClose} className="w-9 h-9 rounded-full flex items-center justify-center text-on hover:bg-s3 pressable" aria-label="退出搜索"><IBack size={19} /></button>
-        <form className="flex-1 flex items-center gap-2 h-10 rounded-(--r-ctl) bg-s3 px-3 focus-within:bg-s4 transition-colors"
+        <form className="flex-1 flex items-center gap-2 h-11 rounded-(--r-ctl) bg-s3 px-3.5 focus-within:bg-s4 transition-colors"
           onSubmit={(e) => { e.preventDefault(); submit(q); }}>
-          <ISearch size={16} className="text-mut shrink-0" />
+          <ISearch size={17} className="text-mut shrink-0" />
           <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={kind === "post" ? "搜索吃瓜帖…" : "搜索短剧…"}
-            className="flex-1 min-w-0 bg-transparent text-[13px] text-on placeholder-dim outline-none" />
+            className="flex-1 min-w-0 bg-transparent text-[13.5px] text-on placeholder-dim outline-none" />
           {q && <button type="button" onClick={() => { seqRef.current++; busy.current = false; setLoading(false); setQ(""); setSubmitted(""); setItems([]); setPosts([]); }} className="w-5 h-5 rounded-full bg-s4 flex items-center justify-center text-mut pressable"><IClose size={11} /></button>}
         </form>
       </div>
