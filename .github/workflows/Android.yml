@@ -1,4 +1,4 @@
-name: Build Android Release
+name: Build Android Release (Signed)
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ env:
 
 jobs:
   android:
-    name: Android Release (arm64 unsigned)
+    name: Android Release (arm64 signed)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -75,19 +75,46 @@ jobs:
       - name: 编译正式版 APK（arm64）
         run: pnpm tauri android build --apk --split-per-abi --target aarch64
 
-      - name: 收集未签名正式版 APK
+      - name: 对齐并签名 APK
         env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64:-}" ]; then
+            echo "::error::缺少 ANDROID_KEY_BASE64 secret，请先在仓库 Settings 中配置"
+            exit 1
+          fi
+          ALIAS="${KEY_ALIAS:-hghub}"
+          S_PASS="${STORE_PASSWORD:-123456}"
+          K_PASS="${KEY_PASSWORD:-123456}"
+
+          KS="$RUNNER_TEMP/release.jks"
+          echo "$KEYSTORE_BASE64" | tr -d '\n\r ' | base64 -d > "$KS"
+
+          BT="$(ls "$ANDROID_SDK_ROOT/build-tools" | sort -V | tail -1)"
+          ZIPALIGN="$ANDROID_SDK_ROOT/build-tools/$BT/zipalign"
+          APKSIGNER="$ANDROID_SDK_ROOT/build-tools/$BT/apksigner"
+
           mkdir -p artifacts
           found=0
           for f in $(find src-tauri/gen/android/app/build/outputs/apk -name '*-release*.apk'); do
             abi="$(basename "$(dirname "$(dirname "$f")")")"
-            out="artifacts/HGhub_${VERSION}_${abi}_unsigned.apk"
-            cp "$f" "$out"
+            aligned="$RUNNER_TEMP/aligned_${abi}.apk"
+            out="artifacts/HGhub_${VERSION}_${abi}_signed.apk"
+            "$ZIPALIGN" -f -p 4 "$f" "$aligned"
+            "$APKSIGNER" sign \
+              --ks "$KS" --ks-key-alias "$ALIAS" \
+              --ks-pass "pass:$S_PASS" --key-pass "pass:$K_PASS" \
+              --v4-signing-enabled false \
+              --out "$out" "$aligned"
+            "$APKSIGNER" verify --print-certs "$out" | head -3
             found=$((found+1))
           done
+          rm -f "$KS"
           if [ "$found" -eq 0 ]; then
             echo "::error::没有找到 release APK"
             exit 1
@@ -96,6 +123,6 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: android-release-apk
+          name: android-release-signed
           path: artifacts/*
           if-no-files-found: error
