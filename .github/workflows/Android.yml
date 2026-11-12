@@ -1,55 +1,33 @@
-name: Release Android (Unsigned)
+name: Build Android Release
 
 on:
-  push:
-    tags: ["v*"]
   workflow_dispatch:
-    inputs:
-      platforms:
-        description: "构建范围：android-arm64 仅现代手机(快)；android 全架构"
-        type: choice
-        default: android-arm64
-        options: [android-arm64, android]
-      quick:
-        description: "quick 编译：thin LTO + 4 个 codegen 单元，快一倍"
-        type: boolean
-        default: true
-      tag:
-        description: "发版用：填 tag（如 v1.2.4）自动发 Release；留空则只出 Artifacts 产物"
-        type: string
-        default: ""
 
 concurrency:
-  group: release-${{ github.ref }}-${{ github.event_name }}-${{ github.run_id }}
+  group: android-release-${{ github.ref }}
   cancel-in-progress: true
 
 env:
   CI: "true"
 
 jobs:
-  # ================= Android：按 ABI 分包（不签名） =================
   android:
-    name: Android (unsigned APK)
+    name: Android Release (arm64 unsigned)
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.quick && 'thin' || 'true' }}
-      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.quick && '4' || '1' }}
+      CARGO_PROFILE_RELEASE_LTO: "true"
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+      CARGO_PROFILE_RELEASE_STRIP: "symbols"
+      CARGO_PROFILE_RELEASE_DEBUG: "false"
     steps:
       - uses: actions/checkout@v7
 
-      - name: 版本号对齐 tag
+      - name: 读取并对齐版本号
         id: ver
         shell: bash
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            V="${GITHUB_REF_NAME#v}"
-          elif [[ -n "${{ inputs.tag }}" ]]; then
-            V="${{ inputs.tag }}"
-            V="${V#v}"
-          else
-            V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
-          fi
+          V="$(node -p "require('./src-tauri/tauri.conf.json').version")"
           node scripts/set-version.mjs "$V"
           CODE="$(node -p "require('./src-tauri/tauri.conf.json').bundle.android.versionCode")"
           echo "version=$V" >> "$GITHUB_OUTPUT"
@@ -78,34 +56,26 @@ jobs:
           yes | "$SDKM" --licenses > /dev/null 2>&1 || true
           "$SDKM" --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;28.2.13676358"
           echo "NDK_HOME=$SDK/ndk/28.2.13676358" >> "$GITHUB_ENV"
-          ls "$SDK/ndk"
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          targets: aarch64-linux-android
       - uses: swatinem/rust-cache@v2.9.3
         continue-on-error: true
         timeout-minutes: 8
         with:
           workspaces: src-tauri -> target
-          key: android
+          key: android-release
 
       - run: pnpm install --frozen-lockfile
 
       - name: 生成 Android 工程
         run: pnpm tauri android init --ci
 
-      - name: 编译 APK（按 ABI 分包）
-        run: |
-          if [ "${{ inputs.quick }}" = "true" ] || [ "${{ inputs.platforms }}" = "android-arm64" ]; then
-            TARGETS="aarch64"
-          else
-            TARGETS="aarch64 armv7 x86_64"
-          fi
-          echo "targets: $TARGETS"
-          pnpm tauri android build --apk --split-per-abi --target $TARGETS
+      - name: 编译正式版 APK（arm64）
+        run: pnpm tauri android build --apk --split-per-abi --target aarch64
 
-      - name: 收集未签名 APK
+      - name: 收集未签名正式版 APK
         env:
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
@@ -122,58 +92,10 @@ jobs:
             echo "::error::没有找到 release APK"
             exit 1
           fi
-          AAPT2="$(ls "$ANDROID_SDK_ROOT"/build-tools/*/aapt2 | sort -V | tail -1)"
-          for a in artifacts/*.apk; do
-            "$AAPT2" dump badging "$a" | grep -m1 "^package:" || true
-          done
           ls -lh artifacts
 
       - uses: actions/upload-artifact@v7
         with:
-          name: android
+          name: android-release-apk
           path: artifacts/*
           if-no-files-found: error
-
-  # ================= 发布（仅当填了 tag 时触发） =================
-  release:
-    name: Publish GitHub Release
-    needs: [android]
-    if: >-
-      startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.tag != '')
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - uses: actions/download-artifact@v8
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: 列出待发布文件
-        run: ls -lh artifacts
-
-      - name: 取版本说明
-        id: notes
-        run: |
-          TAG="${{ inputs.tag != '' && inputs.tag || github.ref_name }}"
-          F="docs/release-notes/${TAG}.md"
-          if [ -f "$F" ]; then
-            echo "body_path=$F" >> "$GITHUB_OUTPUT"
-          else
-            echo "body_path=" >> "$GITHUB_OUTPUT"
-          fi
-
-      - uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
-          name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
-          body_path: ${{ steps.notes.outputs.body_path }}
-          files: artifacts/*
-          generate_release_notes: true
-          fail_on_unmatched_files: true
