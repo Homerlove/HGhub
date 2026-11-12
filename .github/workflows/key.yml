@@ -1,0 +1,31 @@
+name: Generate Keystore
+
+on:
+  workflow_dispatch:
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: 生成密钥库并转为 Base64
+        run: |
+          keytool -genkeypair -v \
+            -keystore hghub.jks \
+            -alias hghub \
+            -keyalg RSA -keysize 2048 -validity 36500 \
+            -storepass 123456 -keypass 123456 \
+            -dname "CN=HGhub, OU=Dev, O=HGhub, L=Local, S=Local, C=CN"
+          base64 -w 0 hghub.jks > base64.txt
+
+      - name: 上传密钥备份
+        uses: actions/upload-artifact@v7
+        with:
+          name: keystore-backup
+          path: |
+            hghub.jks
+            base64.txt
