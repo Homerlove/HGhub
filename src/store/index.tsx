@@ -54,9 +54,7 @@ export type Toast = {
   id: number;
   msg: string;
   icon?: "ok" | "heart" | "star" | "info";
-  /** 线路切换专用的结构化内容，有这个就不看 msg */
-  line?: { region: "cn" | "intl"; host: string; ms: number };
-};
+  };
 
 /** 观看记录：看到第几集、第几秒（`dur` 用来判断是否已看完） */
 export type WatchProgress = { id: number; ep: number; t: number; dur: number; at: number };
@@ -77,7 +75,7 @@ type Persist = {
 };
 
 const LS = appDataKey("default");
-const LEGACY_LS = "hghub_app_v1";
+const LEGACY_LS = "hghubx_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
   muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: true, preferHevc: false,
@@ -111,9 +109,9 @@ function loadPersist(): Persist {
        不是用户主动关的，所以这里做一次性迁移；用户之后自己关掉不会再被改回来。 */
     let swipeEp = p.swipeEp !== false;
     try {
-      if (localStorage.getItem("hghub_swipe_ep_v2") !== "1") {
+      if (localStorage.getItem("hghubx_swipe_ep_v2") !== "1") {
         swipeEp = true;
-        localStorage.setItem("hghub_swipe_ep_v2", "1");
+        localStorage.setItem("hghubx_swipe_ep_v2", "1");
       }
     } catch { /* ignore */ }
     return { ...p, swipeEp, muteOnStartup, muted: muteOnStartup || p.muted === true, history: normalizeHistory(p.history) };
@@ -124,7 +122,7 @@ function loadPersist(): Persist {
 
 function readTheme(): Theme {
   try {
-    return localStorage.getItem("hghub_theme") === "light" ? "light" : "dark";
+    return localStorage.getItem("hghubx_theme") === "light" ? "light" : "dark";
   } catch {
     return "dark";
   }
@@ -163,7 +161,7 @@ type Store = {
   searchHist: string[]; addSearch: (q: string) => void; clearSearchHist: () => void;
   strictSecurity: boolean; strictSecurityReady: boolean; securityPending: boolean; cliRelaxed: boolean; setStrictSecurity: (on: boolean) => Promise<void>;
   toasts: Toast[]; toast: (msg: string, icon?: Toast["icon"]) => void;
-  /** 线路切换计数：变了就让列表页重挂载，重新拉一遍数据 */
+  /** 接入地址（门牌）切换计数：变了就让列表页重挂载，重新拉一遍数据 */
   lineEpoch: number;
   /** 门牌：未激活时只显示 SourceGate，不拉业务数据 */
   gate: GateState; gateReady: boolean; gateBusy: boolean; gateError: string;
@@ -199,7 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     applyTheme(theme);
-    try { localStorage.setItem("hghub_theme", theme); } catch { /* ignore */ }
+    try { localStorage.setItem("hghubx_theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
   useEffect(() => {
@@ -289,50 +287,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setToasts((t) => [...t.slice(-2), { id, msg, icon }]);
     window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 2200);
   }, []);
-  /** 自动选线切换成功后由 `autoLine.ts` 派发，这里只负责显示 */
-  useEffect(() => {
-    const onLine = (e: Event) => {
-      const d = (e as CustomEvent<{ region: "cn" | "intl"; host: string; ms: number }>).detail;
-      if (!d) return;
-      const id = ++toastSeq.current;
-      setToasts((t) => [...t.slice(-2), { id, msg: "", line: d }]);
-      window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3200);
-    };
-    window.addEventListener("hg:line", onLine);
-    return () => window.removeEventListener("hg:line", onLine);
-  }, []);
-  /** 自动选线：主站和发布页上的镜像全都不通。
-   *
-   * 只说一次（60s 节流）——巡检本身 10s 一轮，不节流会一直弹。
-   * 以前这种情况会悄悄切到 `.ai`（接口全 404），用户只看到「加载失败」，
-   * 根本不知道是网络的事。
-   */
-  useEffect(() => {
-    let last = 0;
-    const onDown = () => {
-      const now = Date.now();
-      if (now - last < 60_000) return;
-      last = now;
-      const id = ++toastSeq.current;
-      setToasts((t) => [...t.slice(-2), { id, msg: "线路全部不可用，请检查网络或代理", icon: "info" }]);
-      window.setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3600);
-    };
-    window.addEventListener("hg:line-down", onDown);
-    return () => window.removeEventListener("hg:line-down", onDown);
-  }, []);
-  /** 线路真的换了（自动、手切都算）：
-   *
-   * 旧数据全是在上一个域名上拉的，留着等于对着一条死链路。但各列表页只在
-   * 挂载时拉一次，所以这里给一个递增的 key，让它们重挂载、重新请求。
-   */
-  useEffect(() => {
-    const bump = () => {
-      setLineEpoch((n) => n + 1);
-      api.lineState().then((s) => setSiteBase(s.base)).catch(() => {});
-    };
-    window.addEventListener("hg:line-changed", bump);
-    return () => window.removeEventListener("hg:line-changed", bump);
-  }, []);
+
 
   const setTab = useCallback((t: Tab) => { setTabRaw(t); setStack([]); }, []);
   const push = useCallback((pg: PageInput) => {

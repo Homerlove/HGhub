@@ -285,7 +285,7 @@ async function lifecycleCheck(page) {
 try {
   let mediaDir = args["media-dir"] && resolve(args["media-dir"]);
   if (!mediaDir) {
-    temporaryMedia = await mkdtemp(join(tmpdir(), "hghub-playback-")); mediaDir = temporaryMedia;
+    temporaryMedia = await mkdtemp(join(tmpdir(), "hghubx-playback-")); mediaDir = temporaryMedia;
     try {
       execFileSync(process.env.FFMPEG_PATH || "ffmpeg", ["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=15", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100", "-t", "90", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-sc_threshold", "0", "-pix_fmt", "yuv420p", "-c:a", "aac", "-f", "hls", "-hls_time", "2", "-hls_playlist_type", "vod", "-hls_segment_filename", join(mediaDir, "seg%03d.ts"), join(mediaDir, "list.m3u8")], { timeout: 60000, stdio: "pipe" });
     } catch { throw new Error("Cannot generate HLS fixture: install FFmpeg (libx264/AAC), set FFMPEG_PATH, or pass --media-dir DIR"); }

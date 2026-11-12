@@ -36,7 +36,7 @@ if [[ ! -s "$ADDR_FILE" ]]; then
   exit 1
 fi
 
-# 工程名 / scheme 动态取（我们的 productName 是 HghubX）
+# 工程名 / scheme 动态取（我们的 productName 是 HGhubX）
 PROJECT="$(cd src-tauri/gen/apple && ls -d *.xcodeproj | head -1)"
 SCHEME="$(cd src-tauri/gen/apple && xcodebuild -list -project "$PROJECT" 2>/dev/null | awk '/Schemes:/{f=1;next} f&&NF{print $1;exit}')"
 if [[ -z "$PROJECT" || -z "$SCHEME" ]]; then
@@ -82,7 +82,7 @@ fi
 PACKAGE_DIR=$(mktemp -d)
 mkdir -p "$PACKAGE_DIR/Payload"
 cp -R "$APP" "$PACKAGE_DIR/Payload/"
-IPA="$ROOT/artifacts/HGhub_${VERSION}_ios.ipa"
+IPA="$ROOT/artifacts/HGhubX_${VERSION}_ios.ipa"
 (cd "$PACKAGE_DIR" && zip -qr "$IPA" Payload)
 unzip -tq "$IPA"
 ls -lh "$IPA"

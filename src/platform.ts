@@ -1,12 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   GateState,
-  LineAuto,
-  LineHealth,
-  LineMirrors,
-  LineProbe,
-  LineState,
-  LineTryMain,
   UpdateInfo,
 } from "./types";
 
@@ -25,15 +19,6 @@ export const clearCache = () => invoke<void>("cache_clear");
 export const netDiag = () => invoke<Record<string, unknown>>("net_diag");
 /** 系统方向请求；页面不直接 invoke，统一从门面走。 */
 export const setOrientation = (landscape: boolean) => invoke<void>("set_orientation", { landscape });
-
-/* 线路（数据源） */
-export const lineState = () => invoke<LineState>("line_state");
-export const lineSet = (url: string) => invoke<string>("line_set", { url });
-export const lineMirrors = () => invoke<LineMirrors>("line_mirrors");
-export const lineProbe = (urls: string[]) => invoke<LineProbe[]>("line_probe", { urls });
-export const lineAuto = () => invoke<LineAuto>("line_auto");
-export const lineTryMain = () => invoke<LineTryMain>("line_try_main");
-export const lineHealth = () => invoke<LineHealth>("line_health");
 
 /* 更新与应用控制 */
 export const checkUpdate = () => invoke<UpdateInfo>("check_update");

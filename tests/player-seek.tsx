@@ -52,7 +52,6 @@ if (diagnosticTest) {
     await collect?.(entries);
   };
   playbackLogApi.read = async () => fixture.logs.map(e => JSON.stringify(e)).join("\n");
-  api.lineState = async () => ({ base: "https://fixture.invalid", default: "https://fixture.invalid", fixed: [] });
   void initPlaybackLog();
 }
 Object.assign(window, { playerSeekFixture: fixture });

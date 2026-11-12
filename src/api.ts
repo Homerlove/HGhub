@@ -2,8 +2,7 @@ import { tracePlayback } from "./player/diagnostics";
 import { dataCall, type DataCommand } from "./data/client";
 import { commands } from "./data/commands";
 import {
-  checkUpdate, clearCache, gateOpen, gateReset, gateState, lineAuto, lineHealth, lineMirrors,
-  lineProbe, lineSet, lineState, lineTryMain, logLine, netDiag, openUrl, securitySet,
+  checkUpdate, clearCache, gateOpen, gateReset, gateState, logLine, netDiag, openUrl, securitySet,
   setOrientation,
 } from "./platform";
 import type {
@@ -184,17 +183,6 @@ export const api = {
   like: (id: number, ep: number, on: boolean) => call<unknown>("api_like", commands.like(id, ep, on)),
   collect: (id: number, on: boolean) => call<unknown>("api_collect", commands.collect(id, on)),
   follow: (uid: number, on: boolean) => call<unknown>("api_follow", commands.follow(uid, on)),
-
-  /* 线路（数据源）：固定线路写死在 Rust 侧，镜像线路从地址发布页拉、推荐镜像从发布入口页拉 */
-  lineState,
-  lineSet,
-  lineMirrors,
-  lineProbe,
-  lineAuto,
-  /* 当前是镜像时敲一次主站，通了就切回（不清会话） */
-  lineTryMain,
-  /* 线路体检：探一次 /api/videos，和自动选线同一判据 */
-  lineHealth,
 
   /* 更新检查：对比 GitHub Release 的 tag */
   checkUpdate,
