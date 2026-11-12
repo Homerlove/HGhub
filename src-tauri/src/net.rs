@@ -3,7 +3,7 @@
 //! 站点把全部 `/api/**` 调用收敛成 `POST /api/edge/request` 的信封，
 //! 我们只实现这一个入口，其余接口都是「填 path」。
 //!
-//! # 代理（用户反馈「浏览器能开、HGhub 打不开」的根因就在这里）
+//! # 代理（用户反馈「浏览器能开、HGhubX 打不开」的根因就在这里）
 //!
 //! 客户端的流量**全部**走本文件的 reqwest，跟 WebView2 无关，所以它既不共享
 //! 浏览器的代理设置，也不共享浏览器的证书库：
@@ -16,7 +16,7 @@
 //! * Android 没有注册表可读，系统「Wi-Fi 代理」同样不被 reqwest 采用；
 //!   安卓上只有 VPN/TUN 模式（VpnService 抓全流量）才有效。
 //!
-//! 排查手段：环境变量 `HGHUB_PROXY=http://127.0.0.1:7897` 可强制指定代理，
+//! 排查手段：环境变量 `HGHUBX_PROXY=http://127.0.0.1:7897` 可强制指定代理，
 //! `net_diag` 命令会输出 DNS/HTTP/环境变量快照。
 
 use crate::network_policy;
@@ -41,10 +41,10 @@ pub fn base() -> String {
 pub const UA: &str =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
 
-/// 手动指定代理（排查 / 公司内网用）：`HGHUB_PROXY=http://127.0.0.1:7897`。
+/// 手动指定代理（排查 / 公司内网用）：`HGHUBX_PROXY=http://127.0.0.1:7897`。
 /// 不设时交给 reqwest 的 `system-proxy` 探测（注册表 + 环境变量）。
 fn proxy_override() -> Option<String> {
-    std::env::var("HGHUB_PROXY")
+    std::env::var("HGHUBX_PROXY")
         .ok()
         .map(|s| s.trim().to_string())
         .filter(|s| !s.is_empty())
@@ -70,7 +70,7 @@ fn build_client(host: &str, addrs: &[SocketAddr]) -> Result<reqwest::Client, Str
     }
     if let Some(p) = proxy_override() {
         // 错误信息不能含原始代理 URL（其中可能有用户名/密码）。
-        let proxy = reqwest::Proxy::all(&p).map_err(|_| "HGHUB_PROXY 配置无效（已隐藏原始值）")?;
+        let proxy = reqwest::Proxy::all(&p).map_err(|_| "HGHUBX_PROXY 配置无效（已隐藏原始值）")?;
         builder = builder.proxy(proxy);
     }
     builder
@@ -568,7 +568,7 @@ pub async fn diagnose() -> Value {
             "HTTPS_PROXY": std::env::var("HTTPS_PROXY").ok().map(|p| redact_proxy(&p)),
             "ALL_PROXY": std::env::var("ALL_PROXY").ok().map(|p| redact_proxy(&p)),
             "NO_PROXY": std::env::var("NO_PROXY").ok().map(|_| "[已配置，列表已隐藏]"),
-            "HGHUB_PROXY": proxy_override().map(|p| redact_proxy(&p)),
+            "HGHUBX_PROXY": proxy_override().map(|p| redact_proxy(&p)),
         },
         "runtime": {
             "os": std::env::consts::OS,
@@ -896,9 +896,9 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[ignore = "联网测试：需要 HGHUB_TEST_MEDIA_URL 为当前有效的媒体地址"]
+    #[ignore = "联网测试：需要 HGHUBX_TEST_MEDIA_URL 为当前有效的媒体地址"]
     async fn media_recovers_from_failed_system_dns() {
-        let raw = std::env::var("HGHUB_TEST_MEDIA_URL").expect("HGHUB_TEST_MEDIA_URL");
+        let raw = std::env::var("HGHUBX_TEST_MEDIA_URL").expect("HGHUBX_TEST_MEDIA_URL");
         let target = url::Url::parse(&raw).unwrap();
         let host = target.host_str().unwrap();
         let port = target.port_or_known_default().unwrap();
@@ -922,7 +922,7 @@ mod tests {
         } else {
             assert_eq!(bytes, again);
         }
-        if let Ok(path) = std::env::var("HGHUB_TEST_MEDIA_OUTPUT") {
+        if let Ok(path) = std::env::var("HGHUBX_TEST_MEDIA_OUTPUT") {
             std::fs::write(path, bytes).unwrap();
         }
     }

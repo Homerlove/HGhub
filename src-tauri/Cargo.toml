@@ -1,14 +1,14 @@
 [package]
-name = "hghub"
+name = "hghubx"
 version = "1.3.0"
-description = "HGhub client"
-authors = ["HGhub"]
+description = "HGhubX client"
+authors = ["HGhubX"]
 license = "PolyForm-Noncommercial-1.0.0"
 edition = "2021"
 rust-version = "1.90"
 
 [lib]
-name = "hghub_lib"
+name = "hghubx_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
@@ -29,7 +29,7 @@ serde_json = "1"
 time = { version = "0.3", features = ["formatting"] }
 # 注意：system-proxy 必须显式列出。关掉 default-features 会连带丢掉它，
 # 客户端就完全不看 Windows 系统代理（注册表 ProxyEnable/ProxyServer）而直连，
-# 症状正是「浏览器能开官网、HGhub 打不开」。见 src/net.rs 顶部说明。
+# 症状正是「浏览器能开官网、HGhubX 打不开」。见 src/net.rs 顶部说明。
 reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",
   "system-proxy",

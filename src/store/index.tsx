@@ -75,7 +75,7 @@ type Persist = {
 };
 
 const LS = appDataKey("default");
-const LEGACY_LS = "hghub_app_v1";
+const LEGACY_LS = "hghubx_app_v1";
 const DEFAULTS: Persist = {
   likes: [], favs: [], history: [], follows: [],
   muted: true, muteOnStartup: true, volume: 0.7, searchHist: [], swipeEp: true, preferHevc: false,
@@ -109,9 +109,9 @@ function loadPersist(): Persist {
        不是用户主动关的，所以这里做一次性迁移；用户之后自己关掉不会再被改回来。 */
     let swipeEp = p.swipeEp !== false;
     try {
-      if (localStorage.getItem("hghub_swipe_ep_v2") !== "1") {
+      if (localStorage.getItem("hghubx_swipe_ep_v2") !== "1") {
         swipeEp = true;
-        localStorage.setItem("hghub_swipe_ep_v2", "1");
+        localStorage.setItem("hghubx_swipe_ep_v2", "1");
       }
     } catch { /* ignore */ }
     return { ...p, swipeEp, muteOnStartup, muted: muteOnStartup || p.muted === true, history: normalizeHistory(p.history) };
@@ -122,7 +122,7 @@ function loadPersist(): Persist {
 
 function readTheme(): Theme {
   try {
-    return localStorage.getItem("hghub_theme") === "light" ? "light" : "dark";
+    return localStorage.getItem("hghubx_theme") === "light" ? "light" : "dark";
   } catch {
     return "dark";
   }
@@ -197,7 +197,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     applyTheme(theme);
-    try { localStorage.setItem("hghub_theme", theme); } catch { /* ignore */ }
+    try { localStorage.setItem("hghubx_theme", theme); } catch { /* ignore */ }
   }, [theme]);
 
   useEffect(() => {

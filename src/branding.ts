@@ -2,7 +2,7 @@
 export const APP_NAME = "HGhubX";
 export const APP_TITLE = "HGhubX";
 export const APP_DESC = "第三方客户端";
-export const APP_REPO = "https://github.com/zxsos/HGhub";
+export const APP_REPO = "https://github.com/zxsos/HGhubX";
 
 /** 本地数据命名空间。换门牌时由数据层用 sourceKey 分出不同桶，默认桶兼容旧数据。 */
 export const APP_DATA_PREFIX = "app_data_v1";

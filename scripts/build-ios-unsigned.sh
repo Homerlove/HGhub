@@ -82,7 +82,7 @@ fi
 PACKAGE_DIR=$(mktemp -d)
 mkdir -p "$PACKAGE_DIR/Payload"
 cp -R "$APP" "$PACKAGE_DIR/Payload/"
-IPA="$ROOT/artifacts/HGhub_${VERSION}_ios.ipa"
+IPA="$ROOT/artifacts/HGhubX_${VERSION}_ios.ipa"
 (cd "$PACKAGE_DIR" && zip -qr "$IPA" Payload)
 unzip -tq "$IPA"
 ls -lh "$IPA"

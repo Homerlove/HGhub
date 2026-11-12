@@ -56,7 +56,7 @@ pub async fn net_diag() -> Result<Value, String> {
 
 /* ───────────────────────── 更新检查 ───────────────────────── */
 
-const REPO: &str = "zxsos/HGhub";
+const REPO: &str = "zxsos/HGhubX";
 
 fn ver_parts(v: &str) -> Vec<u64> {
     v.trim()
@@ -883,7 +883,7 @@ mod tests {
     fn reads_version_out_of_tag() {
         assert_eq!(version_in("hgfix-1.2.1-r5"), "1.2.1");
         assert_eq!(version_in("v1.2.0"), "1.2.0");
-        assert_eq!(version_in("HGhub 1.2.1+hg.1"), "1.2.1");
+        assert_eq!(version_in("HGhubX 1.2.1+hg.1"), "1.2.1");
         assert_eq!(version_in("release-notes"), "");
         assert!(is_newer(&version_in("hgfix-1.2.2-r6"), "1.2.1+hg.1"));
         assert!(is_newer(&version_in("hgfix-1.10.0-r9"), "1.9.9+hg.1"));

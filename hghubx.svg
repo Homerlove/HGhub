@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 64 64" role="img" aria-labelledby="hghubx-title hghubx-desc">
-<title id="hghubx-title">HghubX · 深色 X</title><desc id="hghubx-desc">HghubX 应用图标，沿用原项目蓝色体系，使用 X 标识衍生版本。</desc>
+<title id="hghubx-title">HGhubX · 深色 X</title><desc id="hghubx-desc">HGhubX 应用图标，沿用原项目蓝色体系，使用 X 标识衍生版本。</desc>
 <defs><linearGradient id="x-night" x1="4" y1="0" x2="60" y2="64" gradientUnits="userSpaceOnUse"><stop stop-color="#06465b"/><stop offset="1" stop-color="#002837"/></linearGradient></defs>
 <rect width="64" height="64" rx="17.455" fill="url(#x-night)"/>
 <rect x=".65" y=".65" width="62.7" height="62.7" rx="16.8" fill="none" stroke="#60cdff" stroke-opacity=".14" stroke-width=".8"/><g transform="translate(-2.909091 -2.909091) scale(1.4545455)">
