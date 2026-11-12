@@ -161,4 +161,19 @@ jobs:
       - name: 取版本说明
         id: notes
         run: |
-          TAG="${{ inputs.tag != '' && inputs.tag || github.ref_na
+          TAG="${{ inputs.tag != '' && inputs.tag || github.ref_name }}"
+          F="docs/release-notes/${TAG}.md"
+          if [ -f "$F" ]; then
+            echo "body_path=$F" >> "$GITHUB_OUTPUT"
+          else
+            echo "body_path=" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          body_path: ${{ steps.notes.outputs.body_path }}
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
